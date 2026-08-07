@@ -87,7 +87,7 @@ temp/
 
 # Local assistant and editor state
 
-.claude/
+/.claude/
 .idea/
 .vscode/
 
