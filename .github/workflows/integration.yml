@@ -1,0 +1,22 @@
+# Manual integration run: real podman + devcontainer, dummy provider key.
+# Heavy (image build) — deliberately not part of every push.
+name: Integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install devcontainer CLI
+        run: npm install -g @devcontainers/cli
+
+      - name: Run integration test
+        run: ASF_INTEGRATION=1 ./tests/test_integration.sh

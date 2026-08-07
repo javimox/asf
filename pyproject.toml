@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-sandboxing-framework"
+version = "1.0"
+license = "BSD-4-Clause"
+description = "Rootless-Podman isolation and controlled egress for AI agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6,<7"]
+
+[tool.setuptools]
+packages = ["asf", "asf.verification"]

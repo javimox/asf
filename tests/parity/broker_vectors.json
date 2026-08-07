@@ -1,0 +1,76 @@
+{
+  "source": "Accepted pre-Phase-4D Bash broker configuration contract",
+  "owner_pid": 4242,
+  "runtimes": {
+    "claude": {
+      "provider": "anthropic",
+      "protocol": "anthropic",
+      "api_key_name": "ANTHROPIC_API_KEY",
+      "direct_domain": "api.anthropic.com",
+      "model_mode": "wildcard",
+      "default_model": "",
+      "models": [],
+      "route": "anthropic/* (all models)"
+    },
+    "crewai": {
+      "provider": "openai",
+      "protocol": "openai",
+      "api_key_name": "OPENAI_API_KEY",
+      "direct_domain": "api.openai.com",
+      "model_mode": "wildcard",
+      "default_model": "",
+      "models": [],
+      "route": "openai/* (all models)"
+    },
+    "hermes": {
+      "provider": "openai",
+      "protocol": "openai",
+      "api_key_name": "OPENAI_API_KEY",
+      "direct_domain": "api.openai.com",
+      "model_mode": "wildcard",
+      "default_model": "gpt-5.5",
+      "models": [],
+      "route": "openai/* (all models)"
+    },
+    "isolated-worker": {
+      "provider": "openai",
+      "protocol": "openai",
+      "api_key_name": "OPENAI_API_KEY",
+      "direct_domain": "api.openai.com",
+      "model_mode": "wildcard",
+      "default_model": "",
+      "models": [],
+      "route": "openai/* (all models)"
+    },
+    "langgraph": {
+      "provider": "openai",
+      "protocol": "openai",
+      "api_key_name": "OPENAI_API_KEY",
+      "direct_domain": "api.openai.com",
+      "model_mode": "wildcard",
+      "default_model": "",
+      "models": [],
+      "route": "openai/* (all models)"
+    },
+    "python-agent": {
+      "provider": "openai",
+      "protocol": "openai",
+      "api_key_name": "OPENAI_API_KEY",
+      "direct_domain": "api.openai.com",
+      "model_mode": "wildcard",
+      "default_model": "",
+      "models": [],
+      "route": "openai/* (all models)"
+    },
+    "smolagents": {
+      "provider": "openai",
+      "protocol": "openai",
+      "api_key_name": "OPENAI_API_KEY",
+      "direct_domain": "api.openai.com",
+      "model_mode": "wildcard",
+      "default_model": "",
+      "models": [],
+      "route": "openai/* (all models)"
+    }
+  }
+}

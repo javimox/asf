@@ -1,0 +1,385 @@
+{
+  "schema": 2,
+  "description": "Permanent in-process contract for ./sandbox.sh reset after Phase 3D. Ordinary text remains Bash-compatible; stronger live/stale cleanup is recorded explicitly.",
+  "manifests": {
+    "proxy-agent": "name: proxy-agent\nruntime:\n  mode: interactive\nfilesystem:\n  state:\n    - key: config\n      target: /home/node/.config\n    - key: cache\n      target: /home/node/.cache\nllm:\n  broker: true\n  protocol: anthropic\n  provider: anthropic\n  api_key_env: ANTHROPIC_API_KEY\n  direct_domain: api.anthropic.com\nnetwork:\n  mode: proxy\n  allow_domains: [statsig.com]\n  verify_domain: statsig.com\n",
+    "stateless-agent": "name: stateless-agent\nruntime:\n  mode: interactive\nnetwork:\n  mode: isolated\n"
+  },
+  "vectors": [
+    {
+      "id": "no-argument",
+      "argv": [
+        "reset"
+      ],
+      "setup": {},
+      "returncode": 1,
+      "disposition": null,
+      "stdout": "\u001b[0;31mAn agent name is required: ./sandbox.sh reset <agent>\u001b[0m\n  Available agents:\n    proxy-agent\n    stateless-agent\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "unknown-runtime",
+      "argv": [
+        "reset",
+        "not-an-agent"
+      ],
+      "setup": {},
+      "returncode": 1,
+      "disposition": null,
+      "stdout": "\u001b[0;31mUnknown agent: not-an-agent\u001b[0m\n  Available agents:\n    proxy-agent\n    stateless-agent\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "no-session-no-volumes",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {},
+      "returncode": 0,
+      "disposition": "nothing-to-clear",
+      "stdout": "\u001b[1;33mNo persistent volumes found for proxy-agent.\u001b[0m\n  Nothing to clear.\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "no-session-with-volumes",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ]
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all proxy-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-proxy-agent-config {PREFIX}-proxy-agent-cache {PREFIX}-proxy-agent-shell-history\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open proxy-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "partial-volumes",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "volumes": [
+          "config"
+        ]
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all proxy-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-proxy-agent-config\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open proxy-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "live-session",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "session": "live",
+        "support": [
+          "broker",
+          "proxy"
+        ],
+        "networks": [
+          "internal",
+          "provider"
+        ],
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ],
+        "lock": "live",
+        "broker_state": true
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all proxy-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-proxy-agent-config {PREFIX}-proxy-agent-cache {PREFIX}-proxy-agent-shell-history\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open proxy-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      },
+      "divergence": "Python reset reuses StopService and removes the complete live session before deleting state; Bash removed only the runtime container."
+    },
+    {
+      "id": "stale-session",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "session": "stale",
+        "support": [
+          "broker",
+          "proxy"
+        ],
+        "networks": [
+          "internal",
+          "provider"
+        ],
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ],
+        "lock": "stale",
+        "broker_state": true
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all proxy-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-proxy-agent-config {PREFIX}-proxy-agent-cache {PREFIX}-proxy-agent-shell-history\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open proxy-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      },
+      "divergence": "Python recovers stopped runtime and support resources before deleting state."
+    },
+    {
+      "id": "stateless-runtime",
+      "argv": [
+        "reset",
+        "stateless-agent"
+      ],
+      "setup": {
+        "volumes": [
+          "shell"
+        ]
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all stateless-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-stateless-agent-shell-history\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open stateless-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "stateless-runtime-no-volumes",
+      "argv": [
+        "reset",
+        "stateless-agent"
+      ],
+      "setup": {},
+      "returncode": 0,
+      "disposition": "nothing-to-clear",
+      "stdout": "\u001b[1;33mNo persistent volumes found for stateless-agent.\u001b[0m\n  Nothing to clear.\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "another-runtime-volume-untouched",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ],
+        "other_volume": true
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all proxy-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-proxy-agent-config {PREFIX}-proxy-agent-cache {PREFIX}-proxy-agent-shell-history\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open proxy-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 1,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "extra-arguments",
+      "argv": [
+        "reset",
+        "proxy-agent",
+        "ignored"
+      ],
+      "setup": {
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ]
+      },
+      "returncode": 0,
+      "disposition": "cleared",
+      "stdout": "\u001b[0;32m✓ Cleared all proxy-agent state.\u001b[0m\n  \u001b[2m{PREFIX}-proxy-agent-config {PREFIX}-proxy-agent-cache {PREFIX}-proxy-agent-shell-history\u001b[0m\n  Run \u001b[0;34m./sandbox.sh open proxy-agent\u001b[0m to start fresh (repopulates from the image).\n",
+      "stderr": "",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 0,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      }
+    },
+    {
+      "id": "volume-removal-fails",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ],
+        "fail_volume_remove": true
+      },
+      "returncode": 1,
+      "disposition": "volume-cleanup-failed",
+      "stdout": "",
+      "stderr": "\u001b[0;31mCould not clear all proxy-agent state.\u001b[0m\n  {PREFIX}-proxy-agent-config: status 125: Error: volume is in use\n  {PREFIX}-proxy-agent-cache: status 125: Error: volume is in use\n  {PREFIX}-proxy-agent-shell-history: status 125: Error: volume is in use\n  still present: {PREFIX}-proxy-agent-config\n  still present: {PREFIX}-proxy-agent-cache\n  still present: {PREFIX}-proxy-agent-shell-history\n",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 3,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      },
+      "divergence": "Python verifies each failed removal and names every surviving volume."
+    },
+    {
+      "id": "container-removal-fails",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "session": "stale",
+        "support": [
+          "broker"
+        ],
+        "networks": [
+          "internal"
+        ],
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ],
+        "lock": "stale",
+        "fail_runtime_remove": true
+      },
+      "returncode": 1,
+      "disposition": "session-cleanup-failed",
+      "stdout": "",
+      "stderr": "\u001b[0;31mCould not stop proxy-agent safely; persistent state was not cleared.\u001b[0m\n  runtime-proxy-agent: status 125: Error: cannot remove container\n",
+      "remaining": {
+        "containers": 1,
+        "networks": 0,
+        "target_volumes": 3,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      },
+      "divergence": "Python reports the exact failed resource and leaves persistent state untouched."
+    },
+    {
+      "id": "inconclusive-discovery",
+      "argv": [
+        "reset",
+        "proxy-agent"
+      ],
+      "setup": {
+        "volumes": [
+          "config",
+          "cache",
+          "shell"
+        ],
+        "fail_secret_list": true
+      },
+      "returncode": 1,
+      "disposition": "session-cleanup-failed",
+      "stdout": "",
+      "stderr": "\u001b[0;31mCould not stop proxy-agent safely; persistent state was not cleared.\u001b[0m\n  secrets: secret discovery failed\n",
+      "remaining": {
+        "containers": 0,
+        "networks": 0,
+        "target_volumes": 3,
+        "other_volumes": 0,
+        "lock": false,
+        "broker_state": false
+      },
+      "divergence": "Python refuses destructive reset when ownership discovery is incomplete."
+    }
+  ]
+}

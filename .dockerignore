@@ -1,0 +1,51 @@
+.git/
+
+# Secrets and local configuration
+secrets/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+repos.yml
+agents/*/repos.yml
+
+# ASF runtime state
+persistent/
+.devcontainer/sessions/
+.devcontainer/devcontainer.json
+.devcontainer/.firewall-hash
+.devcontainer/.current-agent
+.devcontainer/.broker-host-*
+.devcontainer/.open-lock-*
+
+# Python state
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+build/
+dist/
+
+# Logs and temporary files
+*.log
+*.pid
+.cache/
+tmp/
+temp/
+
+# Local editor and operating-system files
+.claude/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

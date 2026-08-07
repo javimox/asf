@@ -1,0 +1,37 @@
+# A worker with NO direct external network path.
+#
+# `isolated` does NOT mean offline. This runtime can still reach:
+#   - the LiteLLM broker (which forwards to a provider on its own network)
+#   - runtime-local internal services
+#
+# It means the runtime itself cannot open a connection to the internet.
+# Separate ASF runtimes are not connected by default. Data can still leave
+# through the broker.
+name: isolated-worker
+description: Worker with no direct external path (internal services only)
+adapter: generic
+
+runtime:
+  mode: interactive
+
+network:
+  mode: isolated
+  # No allow_domains: there is no proxy, so no external destination exists.
+
+filesystem:
+  state:
+    - key: cache
+      target: /home/node/.cache
+
+llm:
+  broker: true
+  protocol: openai
+  provider: openai
+
+secrets:
+  files:
+    - common.env
+    - isolated-worker.env
+
+env:
+  PYTHONUNBUFFERED: "1"

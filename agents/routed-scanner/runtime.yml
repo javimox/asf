@@ -1,0 +1,43 @@
+# Example routed runtime — the addresses below are PLACEHOLDERS.
+#
+# 192.0.2.0/24 is TEST-NET-1 (RFC 5737), reserved for documentation. It is not
+# routable, so this manifest is deliberately non-functional until you replace
+# every address with your own target. That is intentional: a copyable example
+# pointing at a real address would silently probe whatever host now owns it.
+#
+# To make it work:
+#
+#   1. Choose a target you are authorised to scan.
+#   2. It needs TWO open TCP ports: one you allow, and one you deliberately do
+#      NOT allow. The blocked port must be OPEN on the target — ASF refuses to
+#      treat an unreachable closed port as proof of enforcement.
+#      A ready-made target:  python3 tools/routed_test_target.py --help
+#   3. Replace every 192.0.2.10 below, and both port numbers.
+#
+# ASF verifies this before the runtime starts and aborts if the allowed port is
+# unreachable or the blocked port is reachable.
+
+name: routed-scanner
+adapter: generic
+runtime:
+  mode: interactive
+network:
+  mode: routed
+  allow:
+    # Narrow to /32 unless the workload genuinely needs a range.
+    - cidr: 192.0.2.10/32
+      protocol: tcp
+      ports: [18080]
+  verify:
+    # Positive control: must be reachable, and must be covered by a rule above.
+    address: 192.0.2.10
+    protocol: tcp
+    port: 18080
+    # Negative control: must be OPEN on the target but NOT in the rules above,
+    # so that "unreachable" proves the gateway denied it.
+    blocked_port: 19999
+# net_raw is only needed for raw-socket scans (nmap -sS, OS detection).
+# Remove it if the workload only makes ordinary TCP connections.
+capabilities: [net_raw]
+llm:
+  broker: false

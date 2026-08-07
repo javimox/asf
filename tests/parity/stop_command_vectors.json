@@ -1,0 +1,895 @@
+{
+  "schema": 1,
+  "description": "Behaviour of ./sandbox.sh stop. The Bash `cmd_stop` was captured byte for byte before it was removed; these values are the contract for asf.stop. {PREFIX} is the checkout resource prefix, {SANDBOX} the physical checkout path, and {T} an elapsed-second count the test normalises.",
+  "notes": [
+    "14 of 17 vectors are byte-identical to Bash. The rest carry a `divergence` note and keep the Bash bytes as bash_*.",
+    "Elapsed seconds are tokenised: `_cleanup_action` prints wall-clock time, so a byte-exact comparison would be a race against the clock.",
+    "The engine is a scripted fake (tests/parity/fake_podman_stop.py) that mutates, so `remaining` proves what each implementation actually left.",
+    "Every divergence makes Python stricter: it removes something Bash left, or it reports a failure Bash reported as success. None goes the other way."
+  ],
+  "manifests": {
+    "proxy-agent": "name: proxy-agent\nllm:\n  broker: true\n  protocol: anthropic\n  provider: anthropic\n  api_key_env: ANTHROPIC_API_KEY\n  direct_domain: api.anthropic.com\nnetwork:\n  mode: proxy\n  allow_domains: [statsig.com]\n  verify_domain: statsig.com\n",
+    "isolated-agent": "name: isolated-agent\nnetwork:\n  mode: isolated\n",
+    "routed-agent": "name: routed-agent\ncapabilities: [net_raw]\nnetwork:\n  mode: routed\n  allow:\n    - cidr: 192.0.2.10/32\n      protocol: tcp\n      ports: [18080]\n  verify:\n    address: 192.0.2.10\n    protocol: tcp\n    port: 18080\n    blocked_port: 19999\n"
+  },
+  "vectors": [
+    {
+      "id": "no-session",
+      "argv": [
+        "stop"
+      ],
+      "containers": [],
+      "networks": [],
+      "secrets": [],
+      "files": {},
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping isolated-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[2misolated-agent container: already absent\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[2mproxy-agent container: already absent\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n\u001b[0;34mStopping routed-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[2mrouted-agent container: already absent\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "unknown-runtime",
+      "argv": [
+        "stop",
+        "not-an-agent"
+      ],
+      "containers": [],
+      "networks": [],
+      "secrets": [],
+      "files": {},
+      "fail": {},
+      "returncode": 1,
+      "stdout": "\u001b[0;31mUnknown agent: not-an-agent\u001b[0m\n  Available agents:\n    isolated-agent\n    proxy-agent\n    routed-agent\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "extra-arguments",
+      "argv": [
+        "stop",
+        "proxy-agent",
+        "junk"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal",
+        "{PREFIX}-proxy-agent-egress"
+      ],
+      "secrets": [
+        "{PREFIX}-proxy-agent-provider-4242"
+      ],
+      "files": {},
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "explicit-live-proxy",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal",
+        "{PREFIX}-proxy-agent-egress",
+        "{PREFIX}-proxy-agent-provider"
+      ],
+      "secrets": [
+        "{PREFIX}-proxy-agent-provider-4242"
+      ],
+      "files": {
+        "lock": "proxy-agent",
+        "broker_state": "proxy-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary broker state\n  \u001b[0;32m✓\u001b[0m Temporary broker state removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "implicit-single-session",
+      "argv": [
+        "stop"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal",
+        "{PREFIX}-proxy-agent-egress"
+      ],
+      "secrets": [
+        "{PREFIX}-proxy-agent-provider-4242"
+      ],
+      "files": {
+        "lock": "proxy-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "implicit-multiple-sessions",
+      "argv": [
+        "stop"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "676134583405",
+          "name": "{PREFIX}-isolated-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-isolated-agent-internal"
+          ],
+          "session": "{PREFIX}-isolated-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal",
+        "{PREFIX}-isolated-agent-internal"
+      ],
+      "secrets": [
+        "{PREFIX}-proxy-agent-provider-4242"
+      ],
+      "files": {
+        "lock": "proxy-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping isolated-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing isolated-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "explicit-isolated",
+      "argv": [
+        "stop",
+        "isolated-agent"
+      ],
+      "containers": [
+        {
+          "id": "676134583405",
+          "name": "{PREFIX}-isolated-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-isolated-agent-internal"
+          ],
+          "session": "{PREFIX}-isolated-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-isolated-agent-internal"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "isolated-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping isolated-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing isolated-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "explicit-routed",
+      "argv": [
+        "stop",
+        "routed-agent"
+      ],
+      "containers": [
+        {
+          "id": "221000246611",
+          "name": "{PREFIX}-routed-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-internal",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "session": "{PREFIX}-routed-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "035698614800",
+          "name": "{PREFIX}-routed-agent-gateway-1",
+          "state": "running",
+          "networks": [],
+          "role": "routed-gateway",
+          "agent": "routed-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-routed-agent-internal",
+        "{PREFIX}-routed-agent-scan",
+        "{PREFIX}-routed-agent-routed-egress"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "routed-agent",
+        "reservation": "routed-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping routed-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing routed-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing routed gateway\n  \u001b[0;32m✓\u001b[0m Routed gateway removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "partial-routed-no-gateway",
+      "argv": [
+        "stop",
+        "routed-agent"
+      ],
+      "containers": [
+        {
+          "id": "221000246611",
+          "name": "{PREFIX}-routed-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-internal",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "session": "{PREFIX}-routed-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-routed-agent-internal"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "routed-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping routed-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing routed-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "routed-initializer-left-behind",
+      "argv": [
+        "stop",
+        "routed-agent"
+      ],
+      "containers": [
+        {
+          "id": "221000246611",
+          "name": "{PREFIX}-routed-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-internal",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "session": "{PREFIX}-routed-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "035698614800",
+          "name": "{PREFIX}-routed-agent-gateway-1",
+          "state": "running",
+          "networks": [],
+          "role": "routed-gateway",
+          "agent": "routed-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "405832406893",
+          "name": "{PREFIX}-routed-agent-gateway-1-init",
+          "state": "running",
+          "networks": [],
+          "role": "routed-init",
+          "agent": "routed-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-routed-agent-scan"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "routed-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping routed-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing routed-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing routed gateway\n  \u001b[0;32m✓\u001b[0m Routed gateway removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "already-stopped",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [],
+      "networks": [],
+      "secrets": [],
+      "files": {},
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[2mproxy-agent container: already absent\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "stale-lock-with-resources",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "exited",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal"
+      ],
+      "secrets": [
+        "{PREFIX}-proxy-agent-provider-4242"
+      ],
+      "files": {
+        "lock": "proxy-agent",
+        "broker_state": "proxy-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary broker state\n  \u001b[0;32m✓\u001b[0m Temporary broker state removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      },
+      "divergence": "`_container_id` lists running containers only, so a runtime container left in `exited` state read as 'already absent' and was never removed — the leak stale recovery is supposed to clear. Residue discovery includes stopped containers, so Python removes it.",
+      "bash_returncode": 0,
+      "bash_stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[2mproxy-agent container: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary broker state\n  \u001b[0;32m✓\u001b[0m Temporary broker state removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "bash_stderr": "",
+      "bash_remaining": {
+        "containers": [
+          {
+            "id": "389038863480",
+            "name": "{PREFIX}-proxy-agent",
+            "state": "exited",
+            "networks": [
+              "{PREFIX}-proxy-agent-internal"
+            ],
+            "session": "{PREFIX}-proxy-agent",
+            "sandbox": "{SANDBOX}"
+          }
+        ],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "stale-lock-only",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [],
+      "networks": [],
+      "secrets": [],
+      "files": {
+        "lock": "proxy-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[2mproxy-agent container: already absent\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "resources-without-a-lock",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal"
+      ],
+      "secrets": [
+        "{PREFIX}-proxy-agent-provider-4242"
+      ],
+      "files": {},
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m LiteLLM broker removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing temporary provider secret\n  \u001b[0;32m✓\u001b[0m Temporary provider secret removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "broker-disabled",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "proxy-agent"
+      },
+      "fail": {},
+      "returncode": 0,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;32m✓\u001b[0m Egress proxy removed \u001b[2m({T}s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "stderr": "",
+      "remaining": {
+        "containers": [],
+        "networks": [],
+        "secrets": [],
+        "fail": {}
+      }
+    },
+    {
+      "id": "container-removal-fails",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "595218300142",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "940504098116",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "proxy-agent"
+      },
+      "fail": {
+        "rm": [
+          125,
+          "Error: cannot remove container\n"
+        ]
+      },
+      "returncode": 1,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n",
+      "stderr": "  \u001b[1;33m⚠ Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m failed; continuing cleanup.\u001b[0m\n    Error: cannot remove container\n  \u001b[1;33m⚠ Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m failed; continuing cleanup.\u001b[0m\n    Error: cannot remove container\n  \u001b[1;33m⚠ Stopping and removing egress proxy failed; continuing cleanup.\u001b[0m\n    Error: cannot remove container\n\u001b[0;31mproxy-agent: cleanup did not finish (partially-cleaned)\u001b[0m\n    3 resource(s) still present\n    still present: runtime-container 389038863480\n    still present: broker-container 595218300142\n    still present: proxy-container 940504098116\n",
+      "remaining": {
+        "containers": [
+          {
+            "id": "389038863480",
+            "name": "{PREFIX}-proxy-agent",
+            "state": "running",
+            "networks": [
+              "{PREFIX}-proxy-agent-internal"
+            ],
+            "session": "{PREFIX}-proxy-agent",
+            "sandbox": "{SANDBOX}"
+          },
+          {
+            "id": "595218300142",
+            "name": "{PREFIX}-proxy-agent-litellm-1",
+            "state": "running",
+            "networks": [],
+            "role": "broker",
+            "agent": "proxy-agent",
+            "sandbox": "{SANDBOX}"
+          },
+          {
+            "id": "940504098116",
+            "name": "{PREFIX}-proxy-agent-proxy-1",
+            "state": "running",
+            "networks": [],
+            "role": "proxy",
+            "agent": "proxy-agent",
+            "sandbox": "{SANDBOX}"
+          }
+        ],
+        "networks": [],
+        "secrets": [],
+        "fail": {
+          "rm": [
+            125,
+            "Error: cannot remove container\n"
+          ]
+        }
+      },
+      "divergence": "Bash exited 0 with three containers still present. The command now rescans after cleaning, names what is left, and exits 1. Python also withholds the green cleanup-complete line when post-cleanup verification fails.",
+      "bash_returncode": 0,
+      "bash_stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing egress proxy\n  \u001b[0;34m→\u001b[0m Removing session networks\n  \u001b[0;32m✓\u001b[0m Session networks removed \u001b[2m({T}s)\u001b[0m\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "bash_stderr": "  \u001b[1;33m⚠ Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m failed; continuing cleanup.\u001b[0m\n    Error: cannot remove container\n  \u001b[1;33m⚠ Stopping and removing LiteLLM broker \u001b[2m(grace: 2s)\u001b[0m failed; continuing cleanup.\u001b[0m\n    Error: cannot remove container\n  \u001b[1;33m⚠ Stopping and removing egress proxy failed; continuing cleanup.\u001b[0m\n    Error: cannot remove container\n",
+      "bash_remaining": {
+        "containers": [
+          {
+            "id": "389038863480",
+            "name": "{PREFIX}-proxy-agent",
+            "state": "running",
+            "networks": [
+              "{PREFIX}-proxy-agent-internal"
+            ],
+            "session": "{PREFIX}-proxy-agent",
+            "sandbox": "{SANDBOX}"
+          },
+          {
+            "id": "595218300142",
+            "name": "{PREFIX}-proxy-agent-litellm-1",
+            "state": "running",
+            "networks": [],
+            "role": "broker",
+            "agent": "proxy-agent",
+            "sandbox": "{SANDBOX}"
+          },
+          {
+            "id": "940504098116",
+            "name": "{PREFIX}-proxy-agent-proxy-1",
+            "state": "running",
+            "networks": [],
+            "role": "proxy",
+            "agent": "proxy-agent",
+            "sandbox": "{SANDBOX}"
+          }
+        ],
+        "networks": [],
+        "secrets": [],
+        "fail": {
+          "rm": [
+            125,
+            "Error: cannot remove container\n"
+          ]
+        }
+      }
+    },
+    {
+      "id": "network-removal-fails",
+      "argv": [
+        "stop",
+        "proxy-agent"
+      ],
+      "containers": [
+        {
+          "id": "389038863480",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "networks": [
+        "{PREFIX}-proxy-agent-internal"
+      ],
+      "secrets": [],
+      "files": {
+        "lock": "proxy-agent"
+      },
+      "fail": {
+        "network rm": [
+          125,
+          "Error: network is being used\n"
+        ]
+      },
+      "returncode": 1,
+      "stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n",
+      "stderr": "  \u001b[1;33m⚠ Removing session networks failed; continuing cleanup.\u001b[0m\n    Error: network is being used\n\u001b[0;31mproxy-agent: cleanup did not finish (partially-cleaned)\u001b[0m\n    1 resource(s) still present\n    still present: network {PREFIX}-proxy-agent-internal\n",
+      "remaining": {
+        "containers": [],
+        "networks": [
+          "{PREFIX}-proxy-agent-internal"
+        ],
+        "secrets": [],
+        "fail": {
+          "network rm": [
+            125,
+            "Error: network is being used\n"
+          ]
+        }
+      },
+      "divergence": "Bash exited 0 with the network still present, which then breaks the next `open` because network creation removes and recreates by name. The command now exits 1 and names the network. Python also withholds the green cleanup-complete line when post-cleanup verification fails.",
+      "bash_returncode": 0,
+      "bash_stdout": "\u001b[0;34mStopping proxy-agent session...\u001b[0m\n\n\u001b[0;34mCleaning up ASF session...\u001b[0m\n  \u001b[0;34m→\u001b[0m Stopping and removing proxy-agent container \u001b[2m(grace: 2s)\u001b[0m\n  \u001b[0;32m✓\u001b[0m Agent container removed \u001b[2m({T}s)\u001b[0m\n  \u001b[2mLiteLLM broker: already absent\u001b[0m\n  \u001b[0;34m→\u001b[0m Removing session networks\n\u001b[0;32m✓ ASF session cleanup complete\u001b[0m \u001b[2m({T}s; persistent volumes preserved)\u001b[0m\n",
+      "bash_stderr": "  \u001b[1;33m⚠ Removing session networks failed; continuing cleanup.\u001b[0m\n    Error: network is being used\n",
+      "bash_remaining": {
+        "containers": [],
+        "networks": [
+          "{PREFIX}-proxy-agent-internal"
+        ],
+        "secrets": [],
+        "fail": {
+          "network rm": [
+            125,
+            "Error: network is being used\n"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+# CrewAI runtime.
+#
+# ASF sandboxes your CrewAI application as ONE workload. The adapter here is
+# thin: it declares how to install CrewAI and which directories to persist.
+# It defines NO security policy — the container, network policy, non-root user, and
+# broker are ASF's, identical for every runtime.
+#
+# ISOLATION LIMIT: if your app defines several logical agents (crew members),
+# ASF isolates the application from the host, NOT those agents from each other.
+# They share this container's filesystem, environment, and credentials.
+
+name: crewai
+description: CrewAI application (single-workload sandbox)
+adapter: generic          # image: no agent product baked in; deps install below
+
+runtime:
+  # interactive: a shell — install, run, iterate. To run the app directly:
+  #   mode: service
+  #   command: ["python", "-m", "my_crew.main"]
+  mode: interactive
+
+filesystem:
+  state:
+    # The venv lives on a volume, so dependencies install once, not per session.
+    - key: venv
+      target: /home/node/.venv
+    - key: cache
+      target: /home/node/.cache
+
+llm:
+  broker: true
+  protocol: openai        # CrewAI speaks OpenAI-compatible APIs to the broker
+  provider: openai        # upstream provider; change freely
+  # models:               # omit => every model the key can reach
+  #   - gpt-5.5
+
+# network.allow_domains is the COMPLETE allowlist for this runtime.
+# There is no implicit base list: what is not here cannot be reached.
+# Add git hosts only if this runtime pushes from inside the container; the
+# default workflow (commit inside, push from the host) does not need them.
+network:
+  mode: proxy
+  # Positive control for startup verification: must be in the list below.
+  verify_domain: pypi.org
+  allow_domains:
+    - pypi.org
+    - files.pythonhosted.org
+
+secrets:
+  files:
+    - common.env
+    - crewai.env
+
+env:
+  PYTHONUNBUFFERED: "1"
+  # CrewAI uses LiteLLM internally and reads OPENAI_API_BASE,
+  # which ASF sets from the broker host at container start.
+  CREWAI_TELEMETRY_OPT_OUT: "true"

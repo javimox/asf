@@ -1,0 +1,2684 @@
+{
+  "schema": 1,
+  "description": "Behaviour of ./sandbox.sh test. The Bash implementation in ASF v49 lib/security_test.sh was captured byte for byte before its body was removed; these values are the contract for asf.security. {PREFIX} is the checkout resource prefix and {SANDBOX} the physical checkout path.",
+  "notes": [
+    "13 of 17 vectors are byte-identical to Bash. The remaining ones carry a `divergence` note and keep the Bash bytes alongside as bash_*; every one of them is an infrastructure-failure scenario, where Bash could not tell a probe that failed to run from a policy decision.",
+    "No scenario in which Bash passed now fails, and no scenario in which Bash failed now passes: the divergences change what a failure says, and in infra-inspect-fails how many checks it counts.",
+    "The engine is a scripted fake (tests/parity/fake_podman_security.py). Each vector's `exec` table is matched in order against the joined in-container command, so one probe can fail while every other check still runs."
+  ],
+  "manifests": {
+    "proxy-agent": "name: proxy-agent\nadapter: generic\nllm:\n  broker: true\n  protocol: anthropic\n  provider: anthropic\n  api_key_env: ANTHROPIC_API_KEY\n  direct_domain: api.anthropic.com\nsecrets:\n  files:\n    - proxy-agent.env\nnetwork:\n  mode: proxy\n  allow_domains:\n    - api.anthropic.com\n    - statsig.com\n    - sentry.io\n  verify_domain: statsig.com\n",
+    "bare-proxy": "name: bare-proxy\nadapter: generic\nnetwork:\n  mode: proxy\n",
+    "isolated-agent": "name: isolated-agent\nadapter: generic\nnetwork:\n  mode: isolated\n",
+    "routed-agent": "name: routed-agent\nadapter: generic\ncapabilities:\n  - net_raw\nnetwork:\n  mode: routed\n  allow:\n    - cidr: 192.0.2.10/32\n      protocol: tcp\n      ports: [18080]\n  verify:\n    address: 192.0.2.10\n    protocol: tcp\n    port: 18080\n    blocked_port: 19999\n"
+  },
+  "vectors": [
+    {
+      "id": "proxy-all-pass",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 0,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n\u001b[0;32mSecurity test passed: 43 checks.\u001b[0m\n",
+      "stderr": ""
+    },
+    {
+      "id": "isolated-all-pass",
+      "agent": "isolated-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "d39c838491bc7a96eda112d927802966c16ecbff",
+          "name": "{PREFIX}-isolated-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-isolated-agent-internal"
+          ],
+          "session": "{PREFIX}-isolated-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 0,
+      "stdout": "\u001b[0;34mTesting isolated-agent security boundaries \u001b[2m(isolated)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n  \u001b[0;32m\u2713\u001b[0m external DNS is unavailable\n\n\u001b[0;32mSecurity test passed: 18 checks.\u001b[0m\n",
+      "stderr": ""
+    },
+    {
+      "id": "routed-all-pass",
+      "agent": "routed-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "1db7791fa4ab6f33060a7b8f8c4e6d5e5b1ab0fd",
+          "name": "{PREFIX}-routed-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-internal",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "session": "{PREFIX}-routed-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "ca09f04791e15418cc6e3454f0d0b449dd52a086",
+          "name": "{PREFIX}-routed-agent-gateway-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-routed-egress",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "role": "routed-gateway",
+          "agent": "routed-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 0,
+      "stdout": "\u001b[0;34mTesting routed-agent security boundaries \u001b[2m(routed)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to internal and scan networks\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m routed gateway is running\n  \u001b[0;32m\u2713\u001b[0m gateway is attached only to scan and routed-egress networks\n  \u001b[0;32m\u2713\u001b[0m routed gateway has no capabilities\n  \u001b[0;32m\u2713\u001b[0m routed gateway has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m routed gateway root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m routed gateway publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m routed gateway has IPv4 forwarding enabled\n  \u001b[0;32m\u2713\u001b[0m routed gateway keeps IPv6 forwarding disabled\n  \u001b[0;32m\u2713\u001b[0m NET_ADMIN initializer has exited\n  \u001b[0;32m\u2713\u001b[0m allowed routed TCP control is reachable\n  \u001b[0;32m\u2713\u001b[0m known-open blocked routed port is denied\n  \u001b[0;32m\u2713\u001b[0m route 192.0.2.10/32 is present without a default path\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m external DNS is unavailable\n\n\u001b[0;32mSecurity test passed: 28 checks.\u001b[0m\n",
+      "stderr": ""
+    },
+    {
+      "id": "broker-enabled",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 0,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n\u001b[0;32mSecurity test passed: 43 checks.\u001b[0m\n",
+      "stderr": ""
+    },
+    {
+      "id": "broker-disabled",
+      "agent": "proxy-agent",
+      "broker_enabled": "false",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy policy matches the effective manifest\n\u001b[0;31mSecurity test failed: 1 failed, 33 passed.\u001b[0m\n"
+    },
+    {
+      "id": "empty-allowlist-and-no-positive-control",
+      "agent": "bare-proxy",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "b0e1d04dd81947855e8970bc6753ffd5885c45f2",
+          "name": "{PREFIX}-bare-proxy",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-bare-proxy-internal"
+          ],
+          "session": "{PREFIX}-bare-proxy",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "d1d3ed93c5467502c5e971399828804b7af10b14",
+          "name": "{PREFIX}-bare-proxy-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-bare-proxy-egress",
+            "{PREFIX}-bare-proxy-internal"
+          ],
+          "role": "proxy",
+          "agent": "bare-proxy",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": ":3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 0,
+      "stdout": "\u001b[0;34mTesting bare-proxy security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[2m\u2013 no external allow path declared; positive and port controls skipped\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n\u001b[0;32mSecurity test passed: 31 checks.\u001b[0m\n",
+      "stderr": ""
+    },
+    {
+      "id": "stale-session-no-container",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "\u001b[0;31mNo running proxy-agent container.\u001b[0m\n"
+    },
+    {
+      "id": "missing-proxy-container",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy proxy is running\n\u001b[0;31mSecurity test failed: 1 failed, 25 passed.\u001b[0m\n"
+    },
+    {
+      "id": "missing-broker-container",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m LiteLLM broker is running\n  \u001b[0;31m\u2717\u001b[0m Caddy policy matches the effective manifest\n\u001b[0;31mSecurity test failed: 2 failed, 33 passed.\u001b[0m\n"
+    },
+    {
+      "id": "routed-initializer-still-present",
+      "agent": "routed-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "1db7791fa4ab6f33060a7b8f8c4e6d5e5b1ab0fd",
+          "name": "{PREFIX}-routed-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-internal",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "session": "{PREFIX}-routed-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "ca09f04791e15418cc6e3454f0d0b449dd52a086",
+          "name": "{PREFIX}-routed-agent-gateway-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-routed-egress",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "role": "routed-gateway",
+          "agent": "routed-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "3fe0ac05cd8b14e20f88fb508ee0f6e494242299",
+          "name": "{PREFIX}-routed-agent-gateway-1-init",
+          "state": "running",
+          "networks": [],
+          "role": "routed-init",
+          "agent": "routed-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting routed-agent security boundaries \u001b[2m(routed)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to internal and scan networks\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m routed gateway is running\n  \u001b[0;32m\u2713\u001b[0m gateway is attached only to scan and routed-egress networks\n  \u001b[0;32m\u2713\u001b[0m routed gateway has no capabilities\n  \u001b[0;32m\u2713\u001b[0m routed gateway has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m routed gateway root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m routed gateway publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m routed gateway has IPv4 forwarding enabled\n  \u001b[0;32m\u2713\u001b[0m routed gateway keeps IPv6 forwarding disabled\n  \u001b[0;32m\u2713\u001b[0m allowed routed TCP control is reachable\n  \u001b[0;32m\u2713\u001b[0m known-open blocked routed port is denied\n  \u001b[0;32m\u2713\u001b[0m route 192.0.2.10/32 is present without a default path\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m external DNS is unavailable\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m NET_ADMIN initializer has exited\n\u001b[0;31mSecurity test failed: 1 failed, 27 passed.\u001b[0m\n"
+    },
+    {
+      "id": "routed-missing-gateway",
+      "agent": "routed-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "1db7791fa4ab6f33060a7b8f8c4e6d5e5b1ab0fd",
+          "name": "{PREFIX}-routed-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-routed-agent-internal",
+            "{PREFIX}-routed-agent-scan"
+          ],
+          "session": "{PREFIX}-routed-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting routed-agent security boundaries \u001b[2m(routed)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to internal and scan networks\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m allowed routed TCP control is reachable\n  \u001b[0;32m\u2713\u001b[0m known-open blocked routed port is denied\n  \u001b[0;32m\u2713\u001b[0m route 192.0.2.10/32 is present without a default path\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m external DNS is unavailable\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m routed gateway is running\n\u001b[0;31mSecurity test failed: 1 failed, 19 passed.\u001b[0m\n"
+    },
+    {
+      "id": "infra-probe-not-found",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        },
+        {
+          "match": "id -u",
+          "rc": 127,
+          "stderr": "sh: id: not found\n"
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m runtime user is UID/GID 1000 (test infrastructure failed: 127)\n    sh: id: not found\n\u001b[0;31mSecurity test failed: 1 failed, 42 passed.\u001b[0m\n"
+    },
+    {
+      "id": "infra-podman-125",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "NoNewPrivs",
+          "rc": 125,
+          "stderr": "Error: container state improper\n"
+        },
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m no-new-privileges is enabled (test infrastructure failed: 125)\n    Error: container state improper\n  \u001b[0;31m\u2717\u001b[0m LiteLLM has no-new-privileges (test infrastructure failed: 125)\n    Error: container state improper\n  \u001b[0;31m\u2717\u001b[0m Caddy has no-new-privileges (test infrastructure failed: 125)\n    Error: container state improper\n\u001b[0;31mSecurity test failed: 3 failed, 40 passed.\u001b[0m\n"
+    },
+    {
+      "id": "infra-dns-failure-on-tcp-probe",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "nc -z -w 8",
+          "rc": 1,
+          "stderr": "nc: bad address 'litellm'\n"
+        },
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m LiteLLM is reachable on the internal network (test infrastructure failed: could not resolve fb7926f0c9ad; reachability untested)\n    nc: bad address 'litellm'\n\u001b[0;31mSecurity test failed: 1 failed, 42 passed.\u001b[0m\n",
+      "divergence": "The TCP probe's target would not resolve. Bash printed a bare cross; Python names the cause and marks the check inconclusive. Same verdict, more information.",
+      "bash_returncode": 1,
+      "bash_stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "bash_stderr": "  \u001b[0;31m\u2717\u001b[0m LiteLLM is reachable on the internal network\n    nc: bad address 'litellm'\n\u001b[0;31mSecurity test failed: 1 failed, 42 passed.\u001b[0m\n"
+    },
+    {
+      "id": "infra-proxy-unreachable",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "asf-proxy-request",
+          "rc": 1,
+          "stderr": "nc: connect to proxy failed: Connection refused\n"
+        },
+        {
+          "match": "| nc -w 8",
+          "rc": 1,
+          "stderr": "nc: connect to proxy failed: Connection refused\n"
+        },
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m allowlisted statsig.com:443 is reachable through Caddy (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects CONNECT to an undeclared port (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects plain HTTP to an undeclared port (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects an undeclared destination (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects IPv4 loopback destinations (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects IPv6 loopback destinations (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects private IPv4 destinations (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects private IPv6 destinations (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects the link-local metadata address (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects the direct provider API while brokered (test infrastructure failed: no HTTP response from 2697dfff6ecd:3128)\n    nc: connect to proxy failed: Connection refused\n\u001b[0;31mSecurity test failed: 10 failed, 33 passed.\u001b[0m\n",
+      "divergence": "The proxy was not listening. Bash read every CONNECT probe's non-zero status as a refusal by the proxy, so the deny checks were satisfied by a proxy that was not running; and its positive control used a different command (`nc -X connect`) which the scenario left succeeding. Python uses one probe for both directions and reports no HTTP response as inconclusive.",
+      "bash_returncode": 1,
+      "bash_stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "bash_stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy rejects CONNECT to an undeclared port\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects plain HTTP to an undeclared port\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects an undeclared destination\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects IPv4 loopback destinations\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects IPv6 loopback destinations\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects private IPv4 destinations\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects private IPv6 destinations\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects the link-local metadata address\n    nc: connect to proxy failed: Connection refused\n  \u001b[0;31m\u2717\u001b[0m Caddy rejects the direct provider API while brokered\n    nc: connect to proxy failed: Connection refused\n\u001b[0;31mSecurity test failed: 9 failed, 34 passed.\u001b[0m\n"
+    },
+    {
+      "id": "infra-caddyfile-unreadable",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 1,
+          "stderr": "cat: cannot open\n"
+        },
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy policy matches the effective manifest (test infrastructure failed: could not read the running Caddyfile)\n    cat: cannot open\n\u001b[0;31mSecurity test failed: 1 failed, 42 passed.\u001b[0m\n",
+      "divergence": "The running Caddyfile could not be read. Bash reported the same single cross for an unreadable policy and a mismatched one; Python distinguishes them.",
+      "bash_returncode": 1,
+      "bash_stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy is attached only to internal and egress networks\n  \u001b[0;32m\u2713\u001b[0m Caddy runs as an unprivileged user\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m Caddy publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "bash_stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy policy matches the effective manifest (read failed)\n\u001b[0;31mSecurity test failed: 1 failed, 42 passed.\u001b[0m\n"
+    },
+    {
+      "id": "infra-inspect-fails",
+      "agent": "proxy-agent",
+      "broker_enabled": "true",
+      "containers": [
+        {
+          "id": "04e22a68fcb9acbb5c2fe54ae94cb2f76cd07905",
+          "name": "{PREFIX}-proxy-agent",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "session": "{PREFIX}-proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "fb7926f0c9ad1b4653a33efd835559d63c828f25",
+          "name": "{PREFIX}-proxy-agent-litellm-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-internal",
+            "{PREFIX}-proxy-agent-provider"
+          ],
+          "role": "broker",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        },
+        {
+          "id": "2697dfff6ecd038140f407496d26b3c2afe99704",
+          "name": "{PREFIX}-proxy-agent-proxy-1",
+          "state": "running",
+          "networks": [
+            "{PREFIX}-proxy-agent-egress",
+            "{PREFIX}-proxy-agent-internal"
+          ],
+          "role": "proxy",
+          "agent": "proxy-agent",
+          "sandbox": "{SANDBOX}"
+        }
+      ],
+      "exec": [
+        {
+          "match": "CONNECT statsig.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 200 Connection established\r\n\r\n"
+        },
+        {
+          "match": "statsig.com 443",
+          "rc": 0
+        },
+        {
+          "match": "statsig.com:9000",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "statsig.com:22",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "api.anthropic.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "169.254.169.254:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[fc00::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "10.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "[::1]:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "127.0.0.1:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "example.com:443",
+          "rc": 0,
+          "stdout": "HTTP/1.1 403 Forbidden\r\n\r\n"
+        },
+        {
+          "match": "cat /etc/caddy/Caddyfile",
+          "rc": 0,
+          "stdout": "{\n\tservers { protocols h1 }\n}\n\n:3128 {\n\troute {\n\t\tforward_proxy {\n\t\t\tports 443\n\t\t\tallow sentry.io\n\t\t\tallow statsig.com\n\t\t\tdeny 10.0.0.0/8\n\t\t\tdeny 169.254.0.0/16\n\t\t\tdeny all\n\t\t}\n\t}\n}\n"
+        },
+        {
+          "match": "touch /workspace/sandbox/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Read-only file system\n"
+        },
+        {
+          "match": "touch /etc/",
+          "rc": 1,
+          "stderr": "touch: cannot touch: Permission denied\n"
+        },
+        {
+          "match": "printenv ANTHROPIC_API_KEY",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -6 route show default",
+          "rc": 0,
+          "stdout": ""
+        },
+        {
+          "match": "ip -4 route get 1.1.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "ip -4 route get 192.168.1.1",
+          "rc": 2,
+          "stderr": "RTNETLINK answers: Network is unreachable\n"
+        },
+        {
+          "match": "getent ahostsv4",
+          "rc": 2
+        },
+        {
+          "match": "route=$(ip -4 route show",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "ip -4 route show 192.0.2.10/32",
+          "rc": 0,
+          "stdout": "192.0.2.10 via 10.89.1.1 dev eth1\n"
+        },
+        {
+          "match": "19999",
+          "rc": 1
+        },
+        {
+          "match": "nc -z -w 8",
+          "rc": 0
+        }
+      ],
+      "inspect_fail": [
+        "{PREFIX}-proxy-agent-proxy-1"
+      ],
+      "returncode": 1,
+      "stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy is attached only to internal and egress networks (test infrastructure failed: container is missing)\n  \u001b[0;31m\u2717\u001b[0m Caddy runs as an unprivileged user (test infrastructure failed: container is missing)\n  \u001b[0;31m\u2717\u001b[0m Caddy root filesystem is read-only (test infrastructure failed: container is missing)\n  \u001b[0;31m\u2717\u001b[0m Caddy publishes no host ports (test infrastructure failed: container is missing)\n\u001b[0;31mSecurity test failed: 4 failed, 39 passed.\u001b[0m\n",
+      "divergence": "`podman inspect` failed for the proxy container. Bash's `_test_networks` and `_test_inspect_value` printed a bare cross and continued; Python marks each affected check inconclusive, which changes the failure count and so the summary line. The consolidated typed inspection layer reports the confirmed missing container directly instead of retaining the raw Podman status and stderr for every dependent check.",
+      "bash_returncode": 1,
+      "bash_stdout": "\u001b[0;34mTesting proxy-agent security boundaries \u001b[2m(proxy)\u001b[0m\n  \u001b[0;32m\u2713\u001b[0m agent is attached only to the internal network\n  \u001b[0;32m\u2713\u001b[0m effective capabilities match the manifest\n  \u001b[0;32m\u2713\u001b[0m runtime user is UID/GID 1000\n  \u001b[0;32m\u2713\u001b[0m no-new-privileges is enabled\n  \u001b[0;32m\u2713\u001b[0m sudo is absent\n  \u001b[0;32m\u2713\u001b[0m Podman socket is absent\n  \u001b[0;32m\u2713\u001b[0m host secrets are masked by tmpfs\n  \u001b[0;32m\u2713\u001b[0m framework checkout is read-only\n  \u001b[0;32m\u2713\u001b[0m system directories are not writable\n  \u001b[0;32m\u2713\u001b[0m SSH private-key files are absent\n  \u001b[0;32m\u2713\u001b[0m IPv4 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m IPv6 forwarding is disabled\n  \u001b[0;32m\u2713\u001b[0m agent publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m LiteLLM broker is running\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is reachable on the internal network\n  \u001b[0;32m\u2713\u001b[0m LiteLLM is attached only to internal and provider networks\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no capabilities\n  \u001b[0;32m\u2713\u001b[0m LiteLLM has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m LiteLLM root filesystem is read-only\n  \u001b[0;32m\u2713\u001b[0m LiteLLM publishes no host ports\n  \u001b[0;32m\u2713\u001b[0m provider credential is not present in the agent\n  \u001b[0;32m\u2713\u001b[0m Caddy proxy is running\n  \u001b[0;32m\u2713\u001b[0m Caddy has no capabilities\n  \u001b[0;32m\u2713\u001b[0m Caddy has no-new-privileges\n  \u001b[0;32m\u2713\u001b[0m Caddy policy matches the effective manifest\n  \u001b[0;32m\u2713\u001b[0m allowlisted statsig.com:443 is reachable through Caddy\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects CONNECT to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects plain HTTP to an undeclared port\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects an undeclared destination\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv4 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects IPv6 loopback destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv4 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects private IPv6 destinations\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the link-local metadata address\n  \u001b[0;32m\u2713\u001b[0m Caddy rejects the direct provider API while brokered\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv4 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no IPv6 default route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct public route\n  \u001b[0;32m\u2713\u001b[0m agent has no direct private-network route\n\n",
+      "bash_stderr": "  \u001b[0;31m\u2717\u001b[0m Caddy is attached only to internal and egress networks (could not inspect networks)\n  \u001b[0;31m\u2717\u001b[0m Caddy runs as an unprivileged user (inspect failed)\n  \u001b[0;31m\u2717\u001b[0m Caddy root filesystem is read-only (could not inspect root filesystem)\n  \u001b[0;31m\u2717\u001b[0m Caddy publishes no host ports (could not inspect ports)\n\u001b[0;31mSecurity test failed: 4 failed, 39 passed.\u001b[0m\n"
+    }
+  ]
+}

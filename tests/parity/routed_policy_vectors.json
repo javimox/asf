@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "source": "accepted pre-Phase-5 tools/render_routed_rules.py",
+  "vectors": [
+    {
+      "name": "single-tcp",
+      "rules": [
+        {
+          "cidr": "192.0.2.10/32",
+          "protocol": "tcp",
+          "ports": [
+            18080
+          ]
+        }
+      ],
+      "source_ip": "10.91.0.10",
+      "scan_interface": "eth0",
+      "egress_interface": "eth1",
+      "expected": "flush ruleset\ntable inet asf_filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    iifname \"lo\" accept\n  }\n  chain output {\n    type filter hook output priority filter; policy drop;\n    oifname \"lo\" accept\n  }\n  chain forward {\n    type filter hook forward priority filter; policy drop;\n    iifname \"eth1\" oifname \"eth0\" ip daddr 10.91.0.10 ct state established,related accept\n    iifname \"eth0\" oifname \"eth1\" ip saddr 10.91.0.10 ip daddr 192.0.2.10/32 tcp dport 18080 ct state new,established accept\n  }\n}\ntable ip asf_nat {\n  chain postrouting {\n    type nat hook postrouting priority srcnat; policy accept;\n    ip saddr 10.91.0.10 ip daddr 192.0.2.10/32 masquerade\n  }\n}\n"
+    },
+    {
+      "name": "multi-port-and-any",
+      "rules": [
+        {
+          "cidr": "198.51.100.0/24",
+          "protocol": "tcp",
+          "ports": [
+            80,
+            443
+          ]
+        },
+        {
+          "cidr": "203.0.113.7/32",
+          "protocol": "udp",
+          "ports": "any"
+        }
+      ],
+      "source_ip": "10.91.0.10",
+      "scan_interface": "scan0",
+      "egress_interface": "egress0",
+      "expected": "flush ruleset\ntable inet asf_filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    iifname \"lo\" accept\n  }\n  chain output {\n    type filter hook output priority filter; policy drop;\n    oifname \"lo\" accept\n  }\n  chain forward {\n    type filter hook forward priority filter; policy drop;\n    iifname \"egress0\" oifname \"scan0\" ip daddr 10.91.0.10 ct state established,related accept\n    iifname \"scan0\" oifname \"egress0\" ip saddr 10.91.0.10 ip daddr 198.51.100.0/24 tcp dport { 80, 443 } ct state new,established accept\n    iifname \"scan0\" oifname \"egress0\" ip saddr 10.91.0.10 ip daddr 203.0.113.7/32 meta l4proto udp ct state new,established accept\n  }\n}\ntable ip asf_nat {\n  chain postrouting {\n    type nat hook postrouting priority srcnat; policy accept;\n    ip saddr 10.91.0.10 ip daddr 198.51.100.0/24 masquerade\n    ip saddr 10.91.0.10 ip daddr 203.0.113.7/32 masquerade\n  }\n}\n"
+    },
+    {
+      "name": "icmp-and-deduplicated-nat",
+      "rules": [
+        {
+          "cidr": "192.0.2.0/24",
+          "protocol": "icmp_echo"
+        },
+        {
+          "cidr": "192.0.2.0/24",
+          "protocol": "udp",
+          "ports": [
+            161
+          ]
+        }
+      ],
+      "source_ip": "10.91.0.20",
+      "scan_interface": "veth-scan",
+      "egress_interface": "veth-egress",
+      "expected": "flush ruleset\ntable inet asf_filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    iifname \"lo\" accept\n  }\n  chain output {\n    type filter hook output priority filter; policy drop;\n    oifname \"lo\" accept\n  }\n  chain forward {\n    type filter hook forward priority filter; policy drop;\n    iifname \"veth-egress\" oifname \"veth-scan\" ip daddr 10.91.0.20 ct state established,related accept\n    iifname \"veth-scan\" oifname \"veth-egress\" ip saddr 10.91.0.20 ip daddr 192.0.2.0/24 icmp type echo-request accept\n    iifname \"veth-scan\" oifname \"veth-egress\" ip saddr 10.91.0.20 ip daddr 192.0.2.0/24 udp dport 161 ct state new,established accept\n  }\n}\ntable ip asf_nat {\n  chain postrouting {\n    type nat hook postrouting priority srcnat; policy accept;\n    ip saddr 10.91.0.20 ip daddr 192.0.2.0/24 masquerade\n  }\n}\n"
+    },
+    {
+      "name": "mixed-policy",
+      "rules": [
+        {
+          "cidr": "10.10.0.0/16",
+          "protocol": "tcp",
+          "ports": "any"
+        },
+        {
+          "cidr": "172.20.1.5/32",
+          "protocol": "udp",
+          "ports": [
+            53,
+            123
+          ]
+        },
+        {
+          "cidr": "203.0.113.9/32",
+          "protocol": "icmp_echo"
+        }
+      ],
+      "source_ip": "10.77.30.10",
+      "scan_interface": "eth2",
+      "egress_interface": "eth3",
+      "expected": "flush ruleset\ntable inet asf_filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    iifname \"lo\" accept\n  }\n  chain output {\n    type filter hook output priority filter; policy drop;\n    oifname \"lo\" accept\n  }\n  chain forward {\n    type filter hook forward priority filter; policy drop;\n    iifname \"eth3\" oifname \"eth2\" ip daddr 10.77.30.10 ct state established,related accept\n    iifname \"eth2\" oifname \"eth3\" ip saddr 10.77.30.10 ip daddr 10.10.0.0/16 meta l4proto tcp ct state new,established accept\n    iifname \"eth2\" oifname \"eth3\" ip saddr 10.77.30.10 ip daddr 172.20.1.5/32 udp dport { 53, 123 } ct state new,established accept\n    iifname \"eth2\" oifname \"eth3\" ip saddr 10.77.30.10 ip daddr 203.0.113.9/32 icmp type echo-request accept\n  }\n}\ntable ip asf_nat {\n  chain postrouting {\n    type nat hook postrouting priority srcnat; policy accept;\n    ip saddr 10.77.30.10 ip daddr 10.10.0.0/16 masquerade\n    ip saddr 10.77.30.10 ip daddr 172.20.1.5/32 masquerade\n    ip saddr 10.77.30.10 ip daddr 203.0.113.9/32 masquerade\n  }\n}\n"
+    }
+  ]
+}

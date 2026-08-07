@@ -1,0 +1,7 @@
+# LangGraph + the OpenAI-compatible chat model binding.
+langgraph
+langchain-openai
+
+# NOTE: deliberately unpinned. ASF pins its OWN dependencies in
+# asf.conf; these belong to YOUR app, and the right version depends on
+# your code. Pin them here for reproducible builds.

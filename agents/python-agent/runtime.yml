@@ -1,0 +1,66 @@
+# Example: a Python agent application sandboxed as ONE workload.
+#
+# This single manifest fits LangGraph, CrewAI, smolagents, or any custom Python
+# agent — ASF does not need to understand the application's internal framework.
+# The bundled example uses an OpenAI-compatible LiteLLM route, but a copied
+# runtime may declare another supported protocol, provider, and credential.
+#
+# To use: copy this directory to agents/<your-name>/, set `name:` to match,
+# adjust network.allow_domains, add repositories with
+# `./sandbox.sh repo add <your-name> <path>`, then open the runtime.
+#
+# IMPORTANT LIMIT: if your app defines several logical agents (CrewAI crew
+# members, LangGraph nodes), ASF isolates the APPLICATION from the host — it
+# does NOT isolate those agents from each other. They share this container's
+# filesystem, environment, and credentials.
+
+name: python-agent
+description: Generic Python agent application (LangGraph / CrewAI / smolagents)
+adapter: generic          # no agent product installed; python3, pip, uv present
+
+runtime:
+  # interactive: you get a shell — install deps, run, iterate. Best while
+  # developing. Switch to `service` plus a command to run the app directly:
+  #
+  #   mode: service
+  #   command: ["python", "-m", "my_app.main"]
+  #
+  mode: interactive
+
+filesystem:
+  state:
+    # Survives across sessions; good for a package cache so you do not
+    # re-download dependencies on every start.
+    - key: cache
+      target: /home/node/.cache
+
+llm:
+  broker: true
+  protocol: openai        # what your app speaks TO the broker
+  provider: openai        # upstream provider LiteLLM talks to; swap freely
+  # models:               # omit for every model the key can reach
+  #   - gpt-5.5
+
+# network.allow_domains is the COMPLETE allowlist for this runtime.
+# There is no implicit base list: what is not here cannot be reached.
+# Add git hosts only if this runtime pushes from inside the container; the
+# default workflow (commit inside, push from the host) does not need them.
+network:
+  mode: proxy
+  # Positive control for startup verification: must be in the list below.
+  verify_domain: pypi.org
+  allow_domains:
+    - pypi.org
+    - files.pythonhosted.org
+
+secrets:
+  files:
+    - common.env
+    - python-agent.env    # rename to match `name:` above
+
+# Your app's own settings. ASF passes these through unchanged.
+env:
+  PYTHONUNBUFFERED: "1"
+
+# Repository mounts remain in agents/<name>/repos.yml. Use:
+# ./sandbox.sh repo add <name> <path> [--mode ro|rw]

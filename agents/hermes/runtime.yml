@@ -1,0 +1,49 @@
+# Hermes runtime.
+#
+# MANIFEST SCOPE: see agents/claude/runtime.yml — this file declares only what
+# ASF reads from it today.
+
+name: hermes
+description: Hermes agent interactive CLI
+adapter: hermes
+
+runtime:
+  mode: interactive
+
+filesystem:
+  state:
+    - key: config
+      target: /home/node/.hermes
+
+llm:
+  broker: true
+  protocol: openai        # Hermes speaks OpenAI Chat Completions to the broker
+  provider: openai        # upstream provider; change this to switch providers
+  # api_key_env defaults to OPENAI_API_KEY; direct_domain to api.openai.com
+  # models omitted => wildcard route
+
+# network.allow_domains is the COMPLETE allowlist for this runtime.
+# There is no implicit base list: what is not here cannot be reached.
+# Add git hosts only if this runtime pushes from inside the container; the
+# default workflow (commit inside, push from the host) does not need them.
+network:
+  mode: proxy
+  # Positive control for startup verification: must be in the list below.
+  verify_domain: github.com
+  allow_domains:
+    - github.com
+    - objects.githubusercontent.com
+    - raw.githubusercontent.com
+
+secrets:
+  files:
+    - common.env
+    - hermes.env
+
+# Static environment for the agent process. These are Hermes' own guardrails,
+# enforced by Hermes — not by ASF. ASF's boundaries are the container, network
+# topology, generated policy, and non-root user.
+env:
+  HERMES_WRITE_SAFE_ROOT: /workspace/repos:/home/node/.hermes
+  HERMES_YOLO_MODE: "0"
+  HERMES_REDACT_SECRETS: "true"

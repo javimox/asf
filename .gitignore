@@ -1,0 +1,101 @@
+# ASF generated runtime state
+
+/.devcontainer/devcontainer.json
+/.devcontainer/sessions/
+/.devcontainer/.firewall-hash
+/.devcontainer/.current-agent
+/.devcontainer/.broker-host-*
+/.devcontainer/.open-lock-*
+
+/persistent/
+
+# Host-side secrets
+
+# Ignore everything in secrets except public templates.
+/secrets/*
+!/secrets/*.example
+!/secrets/README.md
+
+# Machine-local repositories assigned per agent. Keep the old root path
+# ignored as well so an existing checkout cannot accidentally publish it.
+/repos.yml
+/agents/*/repos.yml
+
+# Environment files anywhere else.
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!*.env.example
+!*.env.sample
+!*.env.template
+
+# Credentials and private keys
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+credentials.json
+.npmrc
+.pypirc
+.netrc
+
+.aws/
+.gcloud/
+.azure/
+.kube/
+.docker/config.json
+
+# Python
+
+__pycache__/
+*.py[cod]
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.coverage
+coverage.xml
+htmlcov/
+
+.venv/
+venv/
+
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files
+
+*.log
+*.pid
+
+.cache/
+tmp/
+temp/
+
+# Local assistant and editor state
+
+.claude/
+.idea/
+.vscode/
+
+*.swp
+*.swo
+*~
+
+# Operating-system files
+
+.DS_Store
+Thumbs.db

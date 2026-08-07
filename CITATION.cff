@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use ASF in academic work, please cite it as below."
+title: "Agent Sandboxing Framework (ASF)"
+type: software
+authors:
+  - family-names: "Moreno"
+    given-names: "Javier"
+version: 1.0
+date-released: 2026-08-01
+abstract: >-
+  A fail-closed framework for running AI coding agents in isolated rootless
+  Podman containers, combining no-gateway network topology, generated and
+  per-session-verified egress policy, credential brokering, and dependency-
+  ordered resource teardown with persisted session evidence records.
+keywords:
+  - sandboxing
+  - AI agents
+  - container security
+  - network isolation
+license: BSD-4-Clause

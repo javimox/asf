@@ -1,0 +1,6 @@
+# smolagents. Use OpenAIServerModel(api_base=os.environ['OPENAI_BASE_URL']).
+smolagents
+
+# NOTE: deliberately unpinned. ASF pins its OWN dependencies in
+# asf.conf; these belong to YOUR app, and the right version depends on
+# your code. Pin them here for reproducible builds.

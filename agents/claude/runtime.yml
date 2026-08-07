@@ -1,0 +1,52 @@
+# Claude Code runtime.
+#
+# MANIFEST SCOPE: this file declares only what ASF reads from it TODAY —
+# identity, state volumes, LLM/broker settings, network policy, secrets, and
+# static env. Repository mounts stay in agents/claude/repos.yml and deployment
+# hardening in asf.conf. Unknown keys are rejected, so this file cannot drift
+# silently.
+
+name: claude
+description: Claude Code interactive CLI
+adapter: claude
+
+runtime:
+  mode: interactive
+
+filesystem:
+  state:
+    - key: config
+      target: /home/node/.claude
+
+llm:
+  broker: true
+  protocol: anthropic     # wire protocol the agent speaks TO the broker
+  provider: anthropic     # upstream provider LiteLLM talks to
+  # api_key_env defaults to <PROVIDER>_API_KEY (ANTHROPIC_API_KEY)
+  # direct_domain is derived for known providers (api.anthropic.com)
+  # models omitted => wildcard route, every model the key can reach
+
+# network.allow_domains is the COMPLETE allowlist for this runtime.
+# There is no implicit base list: what is not here cannot be reached.
+# Add git hosts only if this runtime pushes from inside the container; the
+# default workflow (commit inside, push from the host) does not need them.
+network:
+  mode: proxy
+  # Positive control for startup verification: must be in the list below.
+  verify_domain: statsig.com
+  allow_domains:
+    - api.anthropic.com
+    - statsig.com
+    - sentry.io
+    - console.anthropic.com
+    - claude.ai
+    - claude.com
+    - platform.claude.com
+
+secrets:
+  files:
+    - common.env
+    - claude.env
+
+env:
+  CLAUDE_CONFIG_DIR: /home/node/.claude

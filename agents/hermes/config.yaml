@@ -1,0 +1,95 @@
+# Hermes agent configuration — Agent Sandboxing Framework.
+# Injected on every container start. Overwritten on each start so that
+# "Always Approve" choices and other runtime changes do not persist.
+# To make a change permanent, edit this file and run ./sandbox.sh open.
+# Docs: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+
+# Active model — pinned so it survives container restarts.
+# Background: /model in the CLI is SESSION-ONLY (it does not persist), which is
+# why the selection was lost every restart. This block is the persistent form
+# (the same keys `hermes model` / the dashboard would write). Because setup.sh
+# re-injects this file on every start, whatever is set here is the model every
+# session — no need to run /model again.
+# To change model/provider: edit here, then ./sandbox.sh open hermes.
+# The reusable API key lives on the HOST in secrets/hermes.env
+# (OPENAI_API_KEY), never in this file. With LiteLLM enabled, ASF overrides
+# OPENAI_BASE_URL and gives Hermes only a short-lived broker token; direct
+# api.openai.com access is removed from the agent-facing Caddy policy. When
+# LITELLM_HERMES_MODELS is undefined, the broker discovers concrete OpenAI
+# model IDs at startup; defining it creates an explicit allowlist.
+model:
+  provider: openai-api          # auto | openai-api | anthropic | openrouter | ...
+  default: gpt-5.5              # must be in LITELLM_HERMES_MODELS when allowlisted
+  base_url: ''                  # OPENAI_BASE_URL overrides this for LiteLLM
+  api_mode: chat_completions
+
+# Run commands directly in this container.
+# (local = no nested container; dangerous-command checks ARE active on local)
+terminal:
+  backend: local
+  timeout: 180
+  env_passthrough: []  # Do not forward host credentials to subprocesses
+
+# Dangerous command approval system.
+# 'manual' always prompts. 'smart' uses an LLM to assess risk. 'off' is YOLO.
+# cron_mode: 'deny' blocks dangerous commands in headless/cron contexts.
+approvals:
+  mode: manual
+  timeout: 60
+  cron_mode: deny                  # Block dangerous commands when running headless
+  mcp_reload_confirm: true         # Confirm before /reload-mcp invalidates the tool cache
+  destructive_slash_confirm: true  # Confirm before /clear, /new, /reset, /undo
+
+# Permanently approved command patterns.
+# Kept empty so no patterns accumulate across sessions.
+# This list is overwritten on every container start.
+# Add entries here (not via CLI "Always Approve") if you need permanent approvals.
+command_allowlist: []
+
+# Security hardening.
+security:
+  redact_secrets: true          # Strip API key patterns from tool output and logs
+  allow_private_urls: false     # SSRF protection: block RFC1918 / loopback / metadata
+  allow_lazy_installs: false    # Do not pip-install packages at runtime in sandbox
+
+  # Tirith — pre-execution command scanner (external binary).
+  # Every terminal command is passed to `tirith check` before it runs (verified
+  # in the Hermes source: terminal_tool -> approval -> check_command_security).
+  # Hermes downloads the binary (SHA-256 verified) to ~/.hermes/bin/tirith in a
+  # background thread when the agent starts — so it appears shortly after launch,
+  # then persists in the ~/.hermes volume. The required GitHub hosts are
+  # declared in agents/hermes/runtime.yml.
+  #
+  # fail_open: false = FAIL-CLOSED. If the scanner is missing, errors, or times
+  # out, the command is BLOCKED rather than run unscanned. Two consequences to
+  # know: (1) on the very first run, terminal commands are blocked during the
+  # few seconds the background download takes; (2) if the download ever fails,
+  # terminal commands stay blocked until it succeeds. Set back to true if you'd
+  # rather trade that safety for availability.
+  tirith_enabled: true
+  tirith_path: "tirith"
+  tirith_timeout: 5
+  tirith_fail_open: false
+
+  # Website blocklist — Caddy enforces the runtime allowlist outside Hermes.
+  website_blocklist:
+    enabled: false
+    domains: []
+
+# Skill guardrails — scan agent-written skills for credential harvesting and injection.
+skills:
+  guard_agent_created: true  # Scan before writing any skill (off by default upstream)
+  write_approval: true       # Require explicit approval for every skill write
+
+# Memory approval — set true for strict control over what Hermes remembers.
+memory:
+  write_approval: false
+
+# Tool-loop protection.
+tool_loop_guardrails:
+  warnings_enabled: true
+  hard_stop_enabled: false  # Set true for unattended/gateway use
+
+# Agent iteration budget.
+agent:
+  max_turns: 90

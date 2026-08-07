@@ -1,0 +1,112 @@
+###############################################################################
+# Claude Code local/private state
+###############################################################################
+
+# Local Claude settings should not be committed.
+# Shared project policy belongs in .claude/settings.json.
+.claude/settings.local.json
+
+# Local Claude memory should not be committed.
+CLAUDE.local.md
+.claude/CLAUDE.local.md
+
+# Claude backups, caches, logs, and transient state
+.claude/**/*.bak
+.claude/**/*.backup
+.claude/**/cache/
+.claude/**/logs/
+.claude/**/tmp/
+.claude/**/sessions/
+.claude/**/transcripts/
+
+###############################################################################
+# MCP local/private config
+###############################################################################
+
+# Commit .mcp.json only if it contains project-scoped, non-secret MCP config.
+# Keep local/private MCP config ignored.
+.mcp.local.json
+.mcp.*.local.json
+
+###############################################################################
+# Secrets and environment files
+###############################################################################
+
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+secrets/
+secret/
+credentials/
+credentials.json
+config/credentials.json
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+*.jks
+
+id_rsa
+id_ed25519
+known_hosts
+
+###############################################################################
+# Tokens and cloud credentials
+###############################################################################
+
+.aws/
+.gcloud/
+.azure/
+.kube/
+.docker/config.json
+.npmrc
+.pypirc
+.netrc
+
+###############################################################################
+# OS/editor noise
+###############################################################################
+
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/
+
+###############################################################################
+# Build/cache noise
+###############################################################################
+
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+tmp/
+temp/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+###############################################################################
+# Semgrep local output
+###############################################################################
+
+.semgrep/
+semgrep-results.json
+semgrep-results.sarif
+
+###############################################################################
+# Per-runtime host repository paths
+###############################################################################
+
+*/repos.yml

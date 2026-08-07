@@ -1,0 +1,376 @@
+{
+  "schema": 1,
+  "description": "Golden resource-identity vectors for asf.identity. Every value was cross-checked against the Bash implementation when generated; the file outlives Bash and pins the naming contract permanently.",
+  "generated_from": "ASF v49 lib/common.sh, lib/network.sh, lib/runtime.sh",
+  "notes": [
+    "is_podman_safe has no Bash equivalent; it records whether the prefix would be accepted by Podman and by the Dev Container renderer.",
+    "owner_pid is arbitrary in golden vectors. During dual implementation, both sides must receive the same top-level session-owner PID.",
+    "Paths with undecodable bytes cannot be represented in JSON and are covered only by the Bash differential test.",
+    "Regenerate or verify the differential vectors on macOS before trusting BSD tr and APFS path parity."
+  ],
+  "prefix_vectors": [
+    {
+      "name": "plain-ascii",
+      "checkout": "/opt/asf",
+      "prefix": "asf-311dab284ebc",
+      "is_podman_safe": true
+    },
+    {
+      "name": "uppercase",
+      "checkout": "/home/tester/ASF",
+      "prefix": "ASF-1bdc8f4ccd92",
+      "is_podman_safe": true
+    },
+    {
+      "name": "dot-in-name",
+      "checkout": "/home/tester/asf.git",
+      "prefix": "asf.git-3489b31a641a",
+      "is_podman_safe": true
+    },
+    {
+      "name": "spaces",
+      "checkout": "/srv/Agent Sandboxing Framework",
+      "prefix": "Agent-Sandboxing-Framework-8430c30e9394",
+      "is_podman_safe": true
+    },
+    {
+      "name": "punctuation",
+      "checkout": "/home/tester/a!!!b###c",
+      "prefix": "a-b-c-98a337ecaf6a",
+      "is_podman_safe": true
+    },
+    {
+      "name": "literal-hyphen-run-squeezed",
+      "checkout": "/home/tester/a--b",
+      "prefix": "a-b-2cbfa516ce68",
+      "is_podman_safe": true
+    },
+    {
+      "name": "leading-hyphens",
+      "checkout": "/home/tester/--lead",
+      "prefix": "lead-eab8efc5a363",
+      "is_podman_safe": true
+    },
+    {
+      "name": "trailing-hyphens",
+      "checkout": "/home/tester/trail--",
+      "prefix": "trail-e199f34845b8",
+      "is_podman_safe": true
+    },
+    {
+      "name": "one-leading-hyphen-only",
+      "checkout": "/home/tester/-.-foo",
+      "prefix": ".-foo-6474a64a08b2",
+      "is_podman_safe": false
+    },
+    {
+      "name": "underscores-not-squeezed",
+      "checkout": "/home/tester/___",
+      "prefix": "___-24dd4bb30ddc",
+      "is_podman_safe": false
+    },
+    {
+      "name": "dots-not-squeezed",
+      "checkout": "/home/tester/...",
+      "prefix": "...-9f93d05cbd67",
+      "is_podman_safe": false
+    },
+    {
+      "name": "all-hyphens-falls-back",
+      "checkout": "/home/tester/---",
+      "prefix": "sandbox-eec0c9309812",
+      "is_podman_safe": true
+    },
+    {
+      "name": "unicode-latin1",
+      "checkout": "/tmp/café--sandbox",
+      "prefix": "caf-sandbox-94222584bba1",
+      "is_podman_safe": true
+    },
+    {
+      "name": "unicode-cjk-falls-back",
+      "checkout": "/home/tester/日本語",
+      "prefix": "sandbox-2358946e4cdc",
+      "is_podman_safe": true
+    },
+    {
+      "name": "unicode-emoji",
+      "checkout": "/home/tester/emoji🙂name",
+      "prefix": "emoji-name-7f98246ea6b1",
+      "is_podman_safe": true
+    },
+    {
+      "name": "shell-metacharacters",
+      "checkout": "/home/tester/star*glob;semi$var",
+      "prefix": "star-glob-semi-var-1f430257f43d",
+      "is_podman_safe": true
+    },
+    {
+      "name": "long-basename-truncated",
+      "checkout": "/home/tester/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "prefix": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-76135651b4ee",
+      "is_podman_safe": true
+    },
+    {
+      "name": "truncation-keeps-trailing-hyphen",
+      "checkout": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail",
+      "prefix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b",
+      "is_podman_safe": true
+    },
+    {
+      "name": "filesystem-root",
+      "checkout": "/",
+      "prefix": "sandbox-8a5edab28263",
+      "is_podman_safe": true
+    },
+    {
+      "name": "single-character",
+      "checkout": "/a",
+      "prefix": "a-6a50dc858413",
+      "is_podman_safe": true
+    },
+    {
+      "name": "podman-unsafe-dot-prefix",
+      "checkout": "/.asf",
+      "prefix": ".asf-87a81bc42f10",
+      "is_podman_safe": false
+    },
+    {
+      "name": "podman-unsafe-underscore-prefix",
+      "checkout": "/home/tester/_worktree",
+      "prefix": "_worktree-08ce6675b923",
+      "is_podman_safe": false
+    },
+    {
+      "name": "duplicate-basename-one",
+      "checkout": "/work/a/asf",
+      "prefix": "asf-47cdee218bbc",
+      "is_podman_safe": true
+    },
+    {
+      "name": "duplicate-basename-two",
+      "checkout": "/work/b/asf",
+      "prefix": "asf-3bac3633f597",
+      "is_podman_safe": true
+    },
+    {
+      "name": "macos-shaped-path",
+      "checkout": "/Users/tester/Projects/ASF",
+      "prefix": "ASF-7d81ba9b1192",
+      "is_podman_safe": true
+    }
+  ],
+  "vectors": [
+    {
+      "checkout": "/opt/asf",
+      "runtime": "hermes",
+      "owner_pid": 4242,
+      "probe_revision": "v2",
+      "state_keys": [
+        "config",
+        "workspace"
+      ],
+      "expected": {
+        "script_dir": "/opt/asf",
+        "prefix": "asf-311dab284ebc",
+        "is_podman_safe": true,
+        "sandbox_label": "asf.sandbox=/opt/asf",
+        "session_key": "asf-311dab284ebc-hermes",
+        "container_name": "asf-311dab284ebc-hermes",
+        "session_label": "asf.session=asf-311dab284ebc-hermes",
+        "config_json": "/opt/asf/.devcontainer/sessions/hermes/devcontainer.json",
+        "proxy_config_dir": "/opt/asf/.devcontainer/sessions/hermes/proxy",
+        "broker_state": "/opt/asf/.devcontainer/.broker-host-hermes",
+        "session_lock": "/opt/asf/.devcontainer/.open-lock-hermes",
+        "runtime_manifest": "/opt/asf/agents/hermes/runtime.yml",
+        "subnet_reservation_session": "asf-311dab284ebc-hermes",
+        "networks": {
+          "internal": "asf-311dab284ebc-hermes-internal",
+          "egress": "asf-311dab284ebc-hermes-egress",
+          "provider": "asf-311dab284ebc-hermes-provider",
+          "scan": "asf-311dab284ebc-hermes-scan",
+          "routed_egress": "asf-311dab284ebc-hermes-routed-egress"
+        },
+        "shell_history_volume": "asf-311dab284ebc-hermes-shell-history",
+        "state_volumes": {
+          "config": "asf-311dab284ebc-hermes-config",
+          "workspace": "asf-311dab284ebc-hermes-workspace"
+        },
+        "broker_secret_prefix": "asf-311dab284ebc-hermes-provider-",
+        "probe_image": "asf-311dab284ebc-probe:v2",
+        "proxy_container": "asf-311dab284ebc-hermes-proxy-4242",
+        "broker_container": "asf-311dab284ebc-hermes-litellm-4242",
+        "broker_secret": "asf-311dab284ebc-hermes-provider-4242",
+        "gateway_container": "asf-311dab284ebc-hermes-gateway-4242",
+        "gateway_init_container": "asf-311dab284ebc-hermes-gateway-4242-init"
+      }
+    },
+    {
+      "checkout": "/srv/Agent Sandboxing Framework",
+      "runtime": "claude",
+      "owner_pid": 7,
+      "probe_revision": "v2.1",
+      "state_keys": [
+        "home"
+      ],
+      "expected": {
+        "script_dir": "/srv/Agent Sandboxing Framework",
+        "prefix": "Agent-Sandboxing-Framework-8430c30e9394",
+        "is_podman_safe": true,
+        "sandbox_label": "asf.sandbox=/srv/Agent Sandboxing Framework",
+        "session_key": "Agent-Sandboxing-Framework-8430c30e9394-claude",
+        "container_name": "Agent-Sandboxing-Framework-8430c30e9394-claude",
+        "session_label": "asf.session=Agent-Sandboxing-Framework-8430c30e9394-claude",
+        "config_json": "/srv/Agent Sandboxing Framework/.devcontainer/sessions/claude/devcontainer.json",
+        "proxy_config_dir": "/srv/Agent Sandboxing Framework/.devcontainer/sessions/claude/proxy",
+        "broker_state": "/srv/Agent Sandboxing Framework/.devcontainer/.broker-host-claude",
+        "session_lock": "/srv/Agent Sandboxing Framework/.devcontainer/.open-lock-claude",
+        "runtime_manifest": "/srv/Agent Sandboxing Framework/agents/claude/runtime.yml",
+        "subnet_reservation_session": "Agent-Sandboxing-Framework-8430c30e9394-claude",
+        "networks": {
+          "internal": "Agent-Sandboxing-Framework-8430c30e9394-claude-internal",
+          "egress": "Agent-Sandboxing-Framework-8430c30e9394-claude-egress",
+          "provider": "Agent-Sandboxing-Framework-8430c30e9394-claude-provider",
+          "scan": "Agent-Sandboxing-Framework-8430c30e9394-claude-scan",
+          "routed_egress": "Agent-Sandboxing-Framework-8430c30e9394-claude-routed-egress"
+        },
+        "shell_history_volume": "Agent-Sandboxing-Framework-8430c30e9394-claude-shell-history",
+        "state_volumes": {
+          "home": "Agent-Sandboxing-Framework-8430c30e9394-claude-home"
+        },
+        "broker_secret_prefix": "Agent-Sandboxing-Framework-8430c30e9394-claude-provider-",
+        "probe_image": "Agent-Sandboxing-Framework-8430c30e9394-probe:v2.1",
+        "proxy_container": "Agent-Sandboxing-Framework-8430c30e9394-claude-proxy-7",
+        "broker_container": "Agent-Sandboxing-Framework-8430c30e9394-claude-litellm-7",
+        "broker_secret": "Agent-Sandboxing-Framework-8430c30e9394-claude-provider-7",
+        "gateway_container": "Agent-Sandboxing-Framework-8430c30e9394-claude-gateway-7",
+        "gateway_init_container": "Agent-Sandboxing-Framework-8430c30e9394-claude-gateway-7-init"
+      }
+    },
+    {
+      "checkout": "/tmp/café--sandbox",
+      "runtime": "scanner_1",
+      "owner_pid": 99999,
+      "probe_revision": "dev_3",
+      "state_keys": [
+        "cache",
+        "results"
+      ],
+      "expected": {
+        "script_dir": "/tmp/café--sandbox",
+        "prefix": "caf-sandbox-94222584bba1",
+        "is_podman_safe": true,
+        "sandbox_label": "asf.sandbox=/tmp/café--sandbox",
+        "session_key": "caf-sandbox-94222584bba1-scanner_1",
+        "container_name": "caf-sandbox-94222584bba1-scanner_1",
+        "session_label": "asf.session=caf-sandbox-94222584bba1-scanner_1",
+        "config_json": "/tmp/café--sandbox/.devcontainer/sessions/scanner_1/devcontainer.json",
+        "proxy_config_dir": "/tmp/café--sandbox/.devcontainer/sessions/scanner_1/proxy",
+        "broker_state": "/tmp/café--sandbox/.devcontainer/.broker-host-scanner_1",
+        "session_lock": "/tmp/café--sandbox/.devcontainer/.open-lock-scanner_1",
+        "runtime_manifest": "/tmp/café--sandbox/agents/scanner_1/runtime.yml",
+        "subnet_reservation_session": "caf-sandbox-94222584bba1-scanner_1",
+        "networks": {
+          "internal": "caf-sandbox-94222584bba1-scanner_1-internal",
+          "egress": "caf-sandbox-94222584bba1-scanner_1-egress",
+          "provider": "caf-sandbox-94222584bba1-scanner_1-provider",
+          "scan": "caf-sandbox-94222584bba1-scanner_1-scan",
+          "routed_egress": "caf-sandbox-94222584bba1-scanner_1-routed-egress"
+        },
+        "shell_history_volume": "caf-sandbox-94222584bba1-scanner_1-shell-history",
+        "state_volumes": {
+          "cache": "caf-sandbox-94222584bba1-scanner_1-cache",
+          "results": "caf-sandbox-94222584bba1-scanner_1-results"
+        },
+        "broker_secret_prefix": "caf-sandbox-94222584bba1-scanner_1-provider-",
+        "probe_image": "caf-sandbox-94222584bba1-probe:dev_3",
+        "proxy_container": "caf-sandbox-94222584bba1-scanner_1-proxy-99999",
+        "broker_container": "caf-sandbox-94222584bba1-scanner_1-litellm-99999",
+        "broker_secret": "caf-sandbox-94222584bba1-scanner_1-provider-99999",
+        "gateway_container": "caf-sandbox-94222584bba1-scanner_1-gateway-99999",
+        "gateway_init_container": "caf-sandbox-94222584bba1-scanner_1-gateway-99999-init"
+      }
+    },
+    {
+      "checkout": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail",
+      "runtime": "demo",
+      "owner_pid": 1,
+      "probe_revision": "v2",
+      "state_keys": [],
+      "expected": {
+        "script_dir": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail",
+        "prefix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b",
+        "is_podman_safe": true,
+        "sandbox_label": "asf.sandbox=/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail",
+        "session_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo",
+        "container_name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo",
+        "session_label": "asf.session=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo",
+        "config_json": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail/.devcontainer/sessions/demo/devcontainer.json",
+        "proxy_config_dir": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail/.devcontainer/sessions/demo/proxy",
+        "broker_state": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail/.devcontainer/.broker-host-demo",
+        "session_lock": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail/.devcontainer/.open-lock-demo",
+        "runtime_manifest": "/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--tail/agents/demo/runtime.yml",
+        "subnet_reservation_session": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo",
+        "networks": {
+          "internal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-internal",
+          "egress": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-egress",
+          "provider": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-provider",
+          "scan": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-scan",
+          "routed_egress": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-routed-egress"
+        },
+        "shell_history_volume": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-shell-history",
+        "state_volumes": {},
+        "broker_secret_prefix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-provider-",
+        "probe_image": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-probe:v2",
+        "proxy_container": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-proxy-1",
+        "broker_container": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-litellm-1",
+        "broker_secret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-provider-1",
+        "gateway_container": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-gateway-1",
+        "gateway_init_container": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--f1dd4cd74c1b-demo-gateway-1-init"
+      }
+    },
+    {
+      "checkout": "/.asf",
+      "runtime": "demo",
+      "owner_pid": 12,
+      "probe_revision": "v2",
+      "state_keys": [
+        "data"
+      ],
+      "expected": {
+        "script_dir": "/.asf",
+        "prefix": ".asf-87a81bc42f10",
+        "is_podman_safe": false,
+        "sandbox_label": "asf.sandbox=/.asf",
+        "session_key": ".asf-87a81bc42f10-demo",
+        "container_name": ".asf-87a81bc42f10-demo",
+        "session_label": "asf.session=.asf-87a81bc42f10-demo",
+        "config_json": "/.asf/.devcontainer/sessions/demo/devcontainer.json",
+        "proxy_config_dir": "/.asf/.devcontainer/sessions/demo/proxy",
+        "broker_state": "/.asf/.devcontainer/.broker-host-demo",
+        "session_lock": "/.asf/.devcontainer/.open-lock-demo",
+        "runtime_manifest": "/.asf/agents/demo/runtime.yml",
+        "subnet_reservation_session": ".asf-87a81bc42f10-demo",
+        "networks": {
+          "internal": ".asf-87a81bc42f10-demo-internal",
+          "egress": ".asf-87a81bc42f10-demo-egress",
+          "provider": ".asf-87a81bc42f10-demo-provider",
+          "scan": ".asf-87a81bc42f10-demo-scan",
+          "routed_egress": ".asf-87a81bc42f10-demo-routed-egress"
+        },
+        "shell_history_volume": ".asf-87a81bc42f10-demo-shell-history",
+        "state_volumes": {
+          "data": ".asf-87a81bc42f10-demo-data"
+        },
+        "broker_secret_prefix": ".asf-87a81bc42f10-demo-provider-",
+        "probe_image": ".asf-87a81bc42f10-probe:v2",
+        "proxy_container": ".asf-87a81bc42f10-demo-proxy-12",
+        "broker_container": ".asf-87a81bc42f10-demo-litellm-12",
+        "broker_secret": ".asf-87a81bc42f10-demo-provider-12",
+        "gateway_container": ".asf-87a81bc42f10-demo-gateway-12",
+        "gateway_init_container": ".asf-87a81bc42f10-demo-gateway-12-init"
+      }
+    }
+  ],
+  "_note": "Captured from the accepted Bash baseline. Checkout paths were sanitised to /home/tester for publication and the path-hash suffixes recomputed with the identical sha256 truncation."
+}

@@ -1,0 +1,86 @@
+{
+  "containerfile": "FROM docker.io/library/caddy@sha256:cc6c40aa7cdea02ef9cb99f3c4e4664ecdb6066ae93ae52ed5288afc511e1241 AS build\nRUN xcaddy build v2.10.0 --with github.com/caddyserver/forwardproxy@0aab84dad4fc2830789f34e27b4d7bc22a40889e\n\nFROM docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc\nRUN apk add --no-cache ca-certificates netcat-openbsd\nRUN addgroup -S -g 10001 caddy && adduser -S -D -H -u 10001 -G caddy caddy\n# xcaddy applies cap_net_bind_service to its output. A multi-stage COPY can\n# preserve that security.capability xattr, but ASF deliberately starts Caddy\n# as an unprivileged user with an empty capability bounding set. Create a new\n# file from the binary contents so no file capability survives. Port 3128 does\n# not need NET_BIND_SERVICE.\nCOPY --from=build /usr/bin/caddy /tmp/caddy-xcaddy\nRUN cat /tmp/caddy-xcaddy > /usr/local/bin/caddy     && chmod 0755 /usr/local/bin/caddy     && rm -f /tmp/caddy-xcaddy     && mkdir -p /etc/caddy /config /data     && chown -R caddy:caddy /config /data\nUSER 10001:10001\nENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data\n# The base image sets its own entrypoint; clear it so CMD is used as written.\nENTRYPOINT []\nCMD [\"caddy\", \"run\", \"--config\", \"/etc/caddy/Caddyfile\", \"--adapter\", \"caddyfile\"]\n",
+  "image_tag": "asf-proxy-caddy:deae0a86ca6ad18c",
+  "policies": [
+    {
+      "access_logs": true,
+      "blocked_domain": "",
+      "broker_active": false,
+      "domains": "pypi.org files.pythonhosted.org pypi.org",
+      "effective_domains": [
+        "files.pythonhosted.org",
+        "pypi.org"
+      ],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:3128 {\n    log {\n        output file /var/log/asf/caddy-access.jsonl {\n            mode 0600\n            roll_size 10MiB\n            roll_keep 2\n            roll_uncompressed\n        }\n        format json\n    }\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                allow files.pythonhosted.org\n                allow pypi.org\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "direct-logs"
+    },
+    {
+      "access_logs": false,
+      "blocked_domain": "",
+      "broker_active": false,
+      "domains": "example.com",
+      "effective_domains": [
+        "example.com"
+      ],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:3128 {\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                allow example.com\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "direct-no-logs"
+    },
+    {
+      "access_logs": true,
+      "blocked_domain": "api.anthropic.com",
+      "broker_active": true,
+      "domains": "api.anthropic.com statsig.com sentry.io",
+      "effective_domains": [
+        "sentry.io",
+        "statsig.com"
+      ],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:3128 {\n    log {\n        output file /var/log/asf/caddy-access.jsonl {\n            mode 0600\n            roll_size 10MiB\n            roll_keep 2\n            roll_uncompressed\n        }\n        format json\n    }\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                allow sentry.io\n                allow statsig.com\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "broker-removes-provider"
+    },
+    {
+      "access_logs": true,
+      "blocked_domain": "",
+      "broker_active": false,
+      "domains": "",
+      "effective_domains": [],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:3128 {\n    log {\n        output file /var/log/asf/caddy-access.jsonl {\n            mode 0600\n            roll_size 10MiB\n            roll_keep 2\n            roll_uncompressed\n        }\n        format json\n    }\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "empty-policy"
+    },
+    {
+      "access_logs": true,
+      "blocked_domain": "",
+      "broker_active": false,
+      "domains": "api.anthropic.com statsig.com sentry.io",
+      "effective_domains": [
+        "api.anthropic.com",
+        "sentry.io",
+        "statsig.com"
+      ],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:3128 {\n    log {\n        output file /var/log/asf/caddy-access.jsonl {\n            mode 0600\n            roll_size 10MiB\n            roll_keep 2\n            roll_uncompressed\n        }\n        format json\n    }\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                allow api.anthropic.com\n                allow sentry.io\n                allow statsig.com\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "direct-provider-stays"
+    },
+    {
+      "access_logs": true,
+      "blocked_domain": "",
+      "broker_active": false,
+      "domains": "statsig.com",
+      "effective_domains": [
+        "statsig.com"
+      ],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:8899 {\n    log {\n        output file /var/log/asf/caddy-access.jsonl {\n            mode 0600\n            roll_size 10MiB\n            roll_keep 2\n            roll_uncompressed\n        }\n        format json\n    }\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                allow statsig.com\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "alternate-listener-port",
+      "port": 8899
+    },
+    {
+      "access_logs": true,
+      "blocked_domain": "api.openai.com",
+      "broker_active": true,
+      "domains": "api.openai.com",
+      "effective_domains": [],
+      "expected": "{\n    admin off\n    servers {\n        protocols h1\n    }\n}\n\n:3128 {\n    log {\n        output file /var/log/asf/caddy-access.jsonl {\n            mode 0600\n            roll_size 10MiB\n            roll_keep 2\n            roll_uncompressed\n        }\n        format json\n    }\n    route {\n        # ASF egress is CONNECT-only. forwardproxy also enforces ports\n        # and ACL on plain requests, but surfaces those denials as\n        # ambiguous 502s (the 403 is wrapped by net/http's transport),\n        # so plain proxying is denied here with an explicit 403.\n        @plain not method CONNECT\n        respond @plain 403\n        forward_proxy {\n            ports 443\n            acl {\n                deny 0.0.0.0/8\n                deny 10.0.0.0/8\n                deny 100.64.0.0/10\n                deny 127.0.0.0/8\n                deny 169.254.0.0/16\n                deny 172.16.0.0/12\n                deny 192.0.0.0/24\n                deny 192.0.2.0/24\n                deny 192.168.0.0/16\n                deny 192.88.99.0/24\n                deny 198.18.0.0/15\n                deny 198.51.100.0/24\n                deny 203.0.113.0/24\n                deny 224.0.0.0/4\n                deny 240.0.0.0/4\n                deny ::/96\n                deny ::1/128\n                deny 64:ff9b::/96\n                deny 64:ff9b:1::/48\n                deny 100::/64\n                deny 2001:db8::/32\n                deny 2002::/16\n                deny fc00::/7\n                deny fec0::/10\n                deny fe80::/10\n                deny ff00::/8\n                deny all\n            }\n        }\n    }\n}\n",
+      "name": "broker-removes-only-domain"
+    }
+  ],
+  "schema": 1,
+  "source": "accepted Phase 4B Bash lib/proxy.sh"
+}
