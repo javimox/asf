@@ -264,8 +264,8 @@ container_udp() {
 }
 
 wait_for_tcp() {
-    local container="$1" ip="$2" port="$3" i
-    for i in $(seq 1 25); do
+    local container="$1" ip="$2" port="$3"
+    for _ in $(seq 1 25); do
         container_tcp "$container" "$ip" "$port" && return 0
         sleep 0.2
     done

@@ -41,7 +41,6 @@ set -uo pipefail
 
 P="asf-gwstage2"
 IMAGE="${P}/tools"
-BASE_IMAGE="docker.io/library/alpine:3.20"
 
 SCAN_NET="${P}-scan"
 EGRESS_NET="${P}-egress"

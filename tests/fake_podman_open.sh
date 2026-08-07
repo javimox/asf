@@ -12,7 +12,7 @@ read_value() { [[ -f "$STATE/$1" ]] && cat "$STATE/$1" || true; }
 remove_value() { rm -f "$STATE/$1"; }
 
 label_filter() {
-    local key="$1" i arg next=false
+    local key="$1" arg next=false
     shift
     for arg in "$@"; do
         if [[ "$next" == true ]]; then
@@ -25,7 +25,7 @@ label_filter() {
 }
 
 container_for_filters() {
-    local session role agent wanted current
+    local session role agent wanted
     session=$(label_filter asf.session "$@")
     role=$(label_filter asf.role "$@")
     agent=$(label_filter asf.agent "$@")

@@ -47,7 +47,6 @@ set -uo pipefail
 
 P="asf-gwmerge"
 IMAGE="${P}/tools"
-BASE_IMAGE="docker.io/library/alpine:3.20"
 
 TARGET_NET="${P}-target"
 G3_NET="${P}-g3"
@@ -187,8 +186,8 @@ hit_exists() {
 }
 
 wait_for_hit() {
-    local who="$1" token="$2" i
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    local who="$1" token="$2"
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
         hit_exists "$who" "$token" && return 0
         sleep 0.2
     done

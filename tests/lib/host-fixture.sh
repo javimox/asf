@@ -48,7 +48,7 @@ host_fixture_init() {
 
 sandbox_in_fixture() {
     (
-        cd "$ROOT"
+        cd "$ROOT" || exit 1
         exec ./sandbox.sh "$@"
     )
 }

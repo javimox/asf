@@ -20,7 +20,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-SCRIPT_DIR="$ROOT"
+
 # Reuse the exact production Caddy build inputs. The policy itself remains a
 # controlled test policy because the local target deliberately has a private
 # address; private-address rejection is covered separately by
@@ -299,12 +299,15 @@ verify_denied() {
 
 start_proxy() {
     local impl="$1" image="$2" i
-    local -a mounts=() tmpfs=(--tmpfs /tmp:rw,nosuid,nodev,size=16m)
+    local -a mounts=() tmpfs=(--tmpfs "/tmp:rw,nosuid,nodev,size=16m")
 
     if [[ "$impl" == caddy ]]; then
         _format_caddy_config "$TMP/caddy" "$image"
         mounts+=(--mount "type=bind,src=$TMP/caddy/Caddyfile,dst=/etc/caddy/Caddyfile,ro=true")
-        tmpfs+=(--mount type=tmpfs,dst=/config,tmpfs-size=4194304,tmpfs-mode=0700,U=true --mount type=tmpfs,dst=/data,tmpfs-size=4194304,tmpfs-mode=0700,U=true)
+        tmpfs+=(
+            --mount "type=tmpfs,dst=/config,tmpfs-size=4194304,tmpfs-mode=0700,U=true"
+            --mount "type=tmpfs,dst=/data,tmpfs-size=4194304,tmpfs-mode=0700,U=true"
+        )
         if ! podman run --rm --network none --read-only \
             "${mounts[@]}" "${tmpfs[@]}" \
             "$image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
@@ -314,7 +317,7 @@ start_proxy() {
             return 1
         fi
     else
-        tmpfs+=(--tmpfs /var/log/tinyproxy:rw,nosuid,nodev,size=16m)
+        tmpfs+=(--tmpfs "/var/log/tinyproxy:rw,nosuid,nodev,size=16m")
     fi
 
     podman rm -f "${P}-proxy" >/dev/null 2>&1 || true

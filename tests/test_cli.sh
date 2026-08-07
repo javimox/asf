@@ -258,7 +258,7 @@ echo $$ > "$TMP/asf/.devcontainer/.open-lock-claude/pid"
 set +e
 blocked=$(cd "$TMP/asf" && PATH="$TMP/bin:$PATH" ./sandbox.sh open claude 2>&1)
 blocked_status=$?
-hermes_out=$(cd "$TMP/asf" && PATH="$TMP/bin:$PATH" ./sandbox.sh open hermes 2>&1)
+(cd "$TMP/asf" && PATH="$TMP/bin:$PATH" ./sandbox.sh open hermes >/dev/null 2>&1)
 hermes_status=$?
 set -e
 rm -rf "$TMP/asf/.devcontainer/.open-lock-claude"

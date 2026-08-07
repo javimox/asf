@@ -3,9 +3,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-SCRIPT_DIR="$ROOT"
 ALPINE_RUNTIME_IMAGE=$(PYTHONPATH="$ROOT" python3 -m asf.proxy image-info --field alpine) || exit 1
-
 P="asf-caddy-paths-$$"
 TARGET_IMAGE="asf-caddy-paths/target:v1"
 CADDY_IMAGE=$(PYTHONPATH="$ROOT" python3 -m asf.proxy image-info --field tag) \

@@ -7,7 +7,6 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-SCRIPT_DIR="$ROOT"
 P=asf-caddy-private-spike
 PASS=0; FAIL=0; TMP=""
 ok(){ echo "  ✓ $*"; PASS=$((PASS+1)); }
@@ -23,10 +22,6 @@ command -v podman >/dev/null || { echo "podman not found"; exit 1; }
 
 ALPINE_RUNTIME_IMAGE=$(PYTHONPATH="$ROOT" python3 -m asf.proxy image-info --field alpine) || exit 1
 TMP=$(mktemp -d)
-PROXY_PORT=3128
-PROXY_EXTRA_DOMAINS="example.com allowed-private.test"
-BROKER_ACTIVE=false
-BROKER_DIRECT_DOMAIN=""
 mkdir -p "$TMP/caddy" "$TMP/target"
 PYTHONPATH="$ROOT" python3 -m asf.proxy write-image-files --directory "$TMP/caddy"
 PYTHONPATH="$ROOT" python3 - "$TMP/caddy/Caddyfile" <<'PY_CADDY'
