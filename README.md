@@ -24,6 +24,68 @@ your shell.
 exactly what ASF protects, what it deliberately doesn't, and every privilege it
 uses.
 
+## Demo
+
+<p align="center">
+  <img src="docs/assets/asf-demo.gif" alt="ASF terminal demo">
+</p>
+
+## Quick start
+
+**Requirements:** Python with PyYAML, rootless Podman, and Dev Container CLI (`@devcontainers/cli`).
+See [Prerequisites](#prerequisites) for installation details.
+
+ASF runtimes are configured per agent. In general, the workflow is:
+
+1. Configure any credentials required by the runtime.
+2. Grant the agent access only to the repositories it needs.
+3. Open the sandbox.
+4. Start the agent inside the constrained environment.
+
+The following example uses **Claude Code** with ASF's default LiteLLM broker configuration.
+
+First, configure the Anthropic API key:
+
+```bash
+cp secrets/claude.env.example secrets/claude.env
+chmod 600 secrets/claude.env
+$EDITOR secrets/claude.env
+```
+
+Set `ANTHROPIC_API_KEY` in `secrets/claude.env`.
+
+Then grant Claude access to the repositories it needs:
+
+```bash
+# Read-write repository
+./sandbox.sh repo add claude ~/projects/my-api
+
+# Optional read-only repository
+./sandbox.sh repo add claude ~/projects/reference --mode ro
+```
+
+Start the sandbox:
+
+```bash
+./sandbox.sh open claude
+```
+
+Inside the container:
+
+```bash
+cd /workspace/repos/my-api
+claude
+```
+
+> **Prefer Claude Code `/login`?** Set `llm.broker: false` in
+> `agents/claude/runtime.yml` before opening the sandbox. Claude Code can then
+> authenticate directly with Anthropic using `/login`. Caddy remains enabled
+> and continues enforcing the configured egress allowlist.
+
+Repository access is configured separately for each agent. Repositories are
+read-write by default; use `--mode ro` for inputs or reference material that
+the agent should not modify.
+
 ## Why ASF — the strong points
 
 - **Isolation by topology, not by filtering.** In proxy and isolated mode the
@@ -50,39 +112,6 @@ uses.
   allowlisted domains that remained unused across a full 12-session window.
   It never edits policy automatically; every change remains a human-reviewed
   manifest edit.
-
-## TL;DR
-
-Example running Claude Code
-
-```bash
-# Give Claude access only to the repositories it needs
-./sandbox.sh repo add claude ~/projects/my-api
-./sandbox.sh repo add claude ~/projects/frontend --mode ro
-
-# Start the container — lands you in a shell
-./sandbox.sh open claude
-
-# Inside the container
-cd /workspace/repos/         # your repos are here
-claude                       # start Claude Code
-```
-
-Repository access is configured per agent in `agents/<name>/repos.yml`. The
-`repo` command (also available as `repository`) creates and updates these
-machine-local YAML files; they are ignored by Git. New repositories are read-write by default. Use `--mode ro` for
-inputs or reference material that the agent must not modify. A simple YAML path
-entry is also accepted as shorthand for `mode: rw`.
-
-The recommended YAML shape is:
-
-```yaml
-repos:
-  - path: /home/user/projects/my-api
-    mode: rw
-  - path: /home/user/projects/reference-docs
-    mode: ro
-```
 
 ## All commands
 
@@ -351,7 +380,7 @@ Setup:
 
 ```bash
 cp secrets/hermes.env.example secrets/hermes.env
- echo 'OPENAI_API_KEY=sk-...' >> secrets/hermes.env
+$EDITOR secrets/hermes.env # add your API key
 chmod 600 secrets/hermes.env
 ./sandbox.sh open hermes
 ```
