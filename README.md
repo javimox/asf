@@ -3,9 +3,7 @@
 [![CI](https://github.com/javimox/asf/actions/workflows/ci.yml/badge.svg)](https://github.com/javimox/asf/actions/workflows/ci.yml)
 ![Podman](https://img.shields.io/badge/Podman-rootless-892CA0?logo=podman&logoColor=white)
 
-A lightweight framework for running AI agents in constrained, policy-controlled
-environments. The agent gets only the resources, filesystem access, network
-access, secrets, and permissions that you explicitly allow.
+A rootless, daemonless Podman-based orchestration framework for sandboxing AI agents.
 
 ASF was born as a Master's degree thesis, but the original idea evolved far
 beyond its initial scope through many hours of design, experimentation, and
@@ -24,7 +22,7 @@ through an ephemeral LiteLLM broker, declared persistent state, and bounded
 resources. On exit, ephemeral resources are removed while only declared state
 volumes remain.
 
-### Network modes at a glance
+### Network modes
 
 <p align="center">
   <img src="docs/assets/network-modes.svg" alt="ASF proxy, isolated, and routed network modes">
