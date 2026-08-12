@@ -87,6 +87,10 @@ network:
 declares, port 443 only, on both request paths. `allow_domains` is the complete
 list; there is no implicit base set.
 
+<p align="center">
+  <img src="assets/proxy-mode.svg" alt="ASF proxy-mode network topology">
+</p>
+
 **`isolated`** — no proxy and no egress network. The runtime has **no direct
 external path**.
 
@@ -96,6 +100,10 @@ external path**.
 > still share the same container. Separate ASF runtimes are not connected by
 > default. Data can therefore still leave through the broker.
 
+<p align="center">
+  <img src="assets/isolated-mode.svg" alt="ASF isolated-mode network topology">
+</p>
+
 **`routed`** — exact IPv4 CIDR/protocol/port access through a separate
 nftables gateway. The runtime receives only declared static routes, never a
 default route. The long-lived gateway has no capabilities; a short-lived
@@ -103,6 +111,15 @@ default route. The long-lived gateway has no capabilities; a short-lived
 absence and re-inspects the capability-less holder before startup succeeds.
 Startup requires a reachable
 allowed TCP control and a second known-open port that policy must block.
+
+<p align="center">
+  <img src="assets/routed-mode.svg" alt="ASF routed-mode network topology">
+</p>
+
+> **Topology note:** a routed runtime also keeps its separate private internal
+> service-network attachment. If LiteLLM is enabled, the runtime reaches the
+> broker on that internal network; broker traffic does not traverse the nftables
+> gateway.
 
 All modes are verified before the agent container starts. Every **deny**
 check is fatal: a policy that fails to block aborts the session. The

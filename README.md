@@ -24,6 +24,16 @@ through an ephemeral LiteLLM broker, declared persistent state, and bounded
 resources. On exit, ephemeral resources are removed while only declared state
 volumes remain.
 
+### Network modes at a glance
+
+<p align="center">
+  <img src="docs/assets/network-modes.svg" alt="ASF proxy, isolated, and routed network modes">
+</p>
+
+ASF supports `proxy`, `isolated`, and `routed` network modes. The detailed
+security properties and per-mode diagrams are documented in
+[Security model](docs/SECURITY-MODEL.md#network-modes).
+
 ## Demo
 
 <p align="center">

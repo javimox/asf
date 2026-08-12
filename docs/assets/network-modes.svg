@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 1090" font-family="'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="mB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f5fd0"/></marker>
+    <marker id="mG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e8449"/></marker>
+    <marker id="mP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7d3c98"/></marker>
+    <marker id="mR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cc2b2b"/></marker>
+    <g id="xm"><path d="M-15 -15L15 15M15 -15L-15 15" stroke="#cc2b2b" stroke-width="10" stroke-linecap="round"/></g>
+    <style>
+      text{fill:#1b1b1b}
+      .agent{fill:#fde8cd;stroke:#e67e22;stroke-width:2.5}
+      .svc{fill:#dcecfa;stroke:#2e6da4;stroke-width:2.5}
+      .gw{fill:#ecdff6;stroke:#7d3c98;stroke-width:2.5}
+      .ok{fill:#def3e3;stroke:#2e8b57;stroke-width:2.5}
+      .bad{fill:#fdf1f0;stroke:#cc2b2b;stroke-width:2.5}
+      .net{fill:#eef5fd;stroke:#6b96e0;stroke-width:2;stroke-dasharray:7 6}
+      .ext{fill:#f8f8f8;stroke:#9a9a9a;stroke-width:2;stroke-dasharray:7 6}
+      .panel{fill:#ffffff;stroke:#444;stroke-width:2}
+      .ab{stroke:#1f5fd0;stroke-width:2.8;fill:none}
+      .ag{stroke:#1e8449;stroke-width:2.8;fill:none}
+      .ap{stroke:#7d3c98;stroke-width:2.8;fill:none}
+      .ar{stroke:#cc2b2b;stroke-width:2.5;fill:none;stroke-dasharray:8 7}
+      .rd{fill:#cc2b2b}
+      .bl{fill:#1f5fd0}
+      .gy{fill:#777}
+    </style>
+  </defs>
+
+  <text x="725" y="60" text-anchor="middle" font-size="56" font-weight="700">ASF network modes</text>
+  <text x="725" y="102" text-anchor="middle" font-size="26" fill="#555">Overview of proxy, isolated, and routed network topologies</text>
+
+  <!-- ================= Panel 1: Proxy ================= -->
+  <rect class="panel" x="12" y="135" width="462" height="780" rx="8"/>
+  <text x="243" y="180" text-anchor="middle" font-size="30" font-weight="700">1. Proxy mode</text>
+
+  <rect class="net" x="26" y="210" width="268" height="580" rx="14"/>
+  <text x="38" y="240" font-size="15" font-style="italic" class="bl">internal network — no gateway</text>
+
+  <rect class="agent" x="36" y="330" width="100" height="105" rx="10"/>
+  <text x="86" y="380" text-anchor="middle" font-size="19" font-weight="700">agent</text>
+  <text x="86" y="404" text-anchor="middle" font-size="10.5">no caps · non-root</text>
+
+  <rect class="svc" x="205" y="330" width="84" height="92" rx="10"/>
+  <text x="247" y="370" text-anchor="middle" font-size="15.5" font-weight="700">asf-proxy</text>
+  <text x="247" y="392" text-anchor="middle" font-size="12">Caddy</text>
+
+  <path class="ab" d="M136 362 L201 362" marker-end="url(#mB)"/>
+  <text x="168" y="352" text-anchor="middle" font-size="10.5">CONNECT</text>
+
+  <rect class="ext" x="318" y="270" width="146" height="172" rx="10"/>
+  <text x="391" y="296" text-anchor="middle" font-size="13" font-style="italic" class="gy">egress network</text>
+  <rect class="ok" x="332" y="322" width="118" height="100" rx="10"/>
+  <text x="391" y="365" text-anchor="middle" font-size="16" font-weight="700">Internet</text>
+  <text x="391" y="388" text-anchor="middle" font-size="10.5">allowlist · :443 only</text>
+
+  <path class="ag" d="M289 368 L328 368" marker-end="url(#mG)"/>
+
+  <path class="ar" d="M140 470 L358 470" marker-end="url(#mR)"/>
+  <use href="#xm" transform="translate(374 470) scale(0.55)"/>
+  <text x="380" y="505" text-anchor="middle" font-size="13" class="rd">direct</text>
+  <text x="380" y="525" text-anchor="middle" font-size="13" class="rd">Internet access</text>
+  <text x="380" y="545" text-anchor="middle" font-size="13" class="rd">blocked</text>
+
+  <path class="ab" d="M86 435 L86 675 L174 675" marker-end="url(#mB)"/>
+  <text x="98" y="588" font-size="12" class="bl">session token</text>
+
+  <rect class="svc" x="180" y="615" width="106" height="122" rx="10"/>
+  <text x="233" y="662" text-anchor="middle" font-size="15" font-weight="700">asf-broker</text>
+  <text x="233" y="684" text-anchor="middle" font-size="12">LiteLLM</text>
+  <text x="233" y="704" text-anchor="middle" font-size="11" font-style="italic">optional</text>
+
+  <rect class="ext" x="318" y="585" width="146" height="177" rx="10"/>
+  <text x="391" y="611" text-anchor="middle" font-size="13" font-style="italic" class="gy">provider network</text>
+  <rect class="ok" x="332" y="638" width="118" height="108" rx="10"/>
+  <text x="391" y="682" text-anchor="middle" font-size="14" font-weight="700">provider API</text>
+  <text x="391" y="703" text-anchor="middle" font-size="10.5">key lives in</text>
+  <text x="391" y="718" text-anchor="middle" font-size="10.5">broker only</text>
+
+  <path class="ag" d="M286 690 L328 690" marker-end="url(#mG)"/>
+
+  <!-- ================= Panel 2: Isolated ================= -->
+  <rect class="panel" x="487" y="135" width="420" height="780" rx="8"/>
+  <text x="697" y="180" text-anchor="middle" font-size="30" font-weight="700">2. Isolated mode</text>
+
+  <rect class="net" x="502" y="260" width="250" height="225" rx="14"/>
+  <text x="514" y="288" font-size="14" font-style="italic" class="bl">internal network — no gateway</text>
+
+  <rect class="agent" x="512" y="350" width="96" height="105" rx="10"/>
+  <text x="560" y="398" text-anchor="middle" font-size="18" font-weight="700">agent</text>
+  <text x="560" y="422" text-anchor="middle" font-size="10">no caps · non-root</text>
+
+  <text x="631" y="342" text-anchor="middle" font-size="12">if enabled</text>
+  <rect class="svc" x="660" y="358" width="88" height="95" rx="10"/>
+  <text x="704" y="399" text-anchor="middle" font-size="14" font-weight="700">asf-broker</text>
+  <text x="704" y="421" text-anchor="middle" font-size="11" font-style="italic">optional</text>
+
+  <path class="ab" d="M608 404 L655 404" marker-end="url(#mB)"/>
+
+  <rect class="ext" x="782" y="330" width="115" height="155" rx="10"/>
+  <text x="839" y="354" text-anchor="middle" font-size="12" font-style="italic" class="gy">provider network</text>
+  <rect class="ok" x="790" y="400" width="100" height="66" rx="10"/>
+  <text x="840" y="438" text-anchor="middle" font-size="13" font-weight="700">provider API</text>
+
+  <path class="ag" d="M748 415 L786 428" marker-end="url(#mG)"/>
+
+  <use href="#xm" transform="translate(636 550) scale(0.6)"/>
+  <text x="662" y="546" font-size="13.5" class="rd">no egress network ·</text>
+  <text x="662" y="566" font-size="13.5" class="rd">no proxy · no route</text>
+
+  <use href="#xm" transform="translate(636 640) scale(0.6)"/>
+  <text x="662" y="636" font-size="13.5" class="rd">no direct</text>
+  <text x="662" y="656" font-size="13.5" class="rd">Internet access</text>
+
+  <path class="ar" d="M625 490 L635 698" marker-end="url(#mR)"/>
+
+  <rect class="ext" x="522" y="705" width="345" height="70" rx="12"/>
+  <text x="694" y="748" text-anchor="middle" font-size="22" font-weight="700" fill="#333">Internet</text>
+
+  <text x="697" y="822" text-anchor="middle" font-size="14">No general egress. With the optional broker</text>
+  <text x="697" y="845" text-anchor="middle" font-size="14">enabled, LLM requests can still be forwarded</text>
+  <text x="697" y="868" text-anchor="middle" font-size="14">externally.</text>
+
+  <!-- ================= Panel 3: Routed ================= -->
+  <rect class="panel" x="920" y="135" width="518" height="780" rx="8"/>
+  <text x="1179" y="180" text-anchor="middle" font-size="30" font-weight="700">3. Routed mode</text>
+
+  <rect class="net" x="934" y="210" width="282" height="555" rx="14"/>
+  <text x="946" y="240" font-size="14" font-style="italic" class="bl">routed network — static routes only</text>
+
+  <rect class="agent" x="944" y="330" width="100" height="105" rx="10"/>
+  <text x="994" y="378" text-anchor="middle" font-size="18" font-weight="700">agent</text>
+  <text x="994" y="402" text-anchor="middle" font-size="10.5">no default route</text>
+
+  <rect class="gw" x="1098" y="330" width="102" height="105" rx="10"/>
+  <text x="1149" y="366" text-anchor="middle" font-size="15" font-weight="700">gateway</text>
+  <text x="1149" y="388" text-anchor="middle" font-size="11">nftables</text>
+  <text x="1149" y="406" text-anchor="middle" font-size="11">no caps</text>
+
+  <path class="ap" d="M1044 382 L1094 382" marker-end="url(#mP)"/>
+
+  <rect class="ext" x="1258" y="245" width="168" height="520" rx="10"/>
+  <text x="1342" y="272" text-anchor="middle" font-size="12.5" font-style="italic" class="gy">declared targets</text>
+  <text x="1342" y="291" text-anchor="middle" font-size="12.5" font-style="italic" class="gy">(LAN / VM)</text>
+
+  <rect class="ok" x="1270" y="325" width="143" height="112" rx="10"/>
+  <text x="1341" y="360" text-anchor="middle" font-size="13" font-weight="700">192.0.2.2:18080</text>
+  <text x="1341" y="382" text-anchor="middle" font-size="10.5">allowed ip ·</text>
+  <text x="1341" y="398" text-anchor="middle" font-size="10.5">proto · port</text>
+
+  <path class="ag" d="M1200 378 L1266 378" marker-end="url(#mG)"/>
+
+  <rect class="bad" x="1270" y="485" width="143" height="62" rx="10"/>
+  <text x="1341" y="523" text-anchor="middle" font-size="13.5" font-weight="700" class="rd">anything else</text>
+
+  <path class="ar" d="M1200 435 C 1228 468, 1238 486, 1262 505" marker-end="url(#mR)"/>
+  <use href="#xm" transform="translate(1233 475) scale(0.5)"/>
+
+  <text x="1341" y="580" text-anchor="middle" font-size="14" font-weight="700" class="rd">deny-by-default,</text>
+  <text x="1341" y="601" text-anchor="middle" font-size="14" font-weight="700" class="rd">all three chains</text>
+
+  <path class="ab" d="M994 435 L994 596" marker-end="url(#mB)"/>
+  <text x="1006" y="520" font-size="12" class="bl">session token</text>
+
+  <rect class="svc" x="944" y="600" width="120" height="122" rx="10"/>
+  <text x="1004" y="646" text-anchor="middle" font-size="15" font-weight="700">asf-broker</text>
+  <text x="1004" y="668" text-anchor="middle" font-size="12">LiteLLM</text>
+  <text x="1004" y="688" text-anchor="middle" font-size="11" font-style="italic">optional</text>
+
+  <rect class="ok" x="1270" y="660" width="143" height="86" rx="10"/>
+  <text x="1341" y="696" text-anchor="middle" font-size="13.5" font-weight="700">provider API</text>
+  <text x="1341" y="718" text-anchor="middle" font-size="10.5">optional via broker</text>
+
+  <path class="ag" d="M1064 692 L1266 700" marker-end="url(#mG)"/>
+
+  <text x="1129" y="845" text-anchor="middle" font-size="13.5">policy loaded by a short-lived NET_ADMIN</text>
+  <text x="1129" y="868" text-anchor="middle" font-size="13.5">initializer that exits — its absence is verified</text>
+
+  <!-- ================= Legend ================= -->
+  <rect class="panel" x="18" y="945" width="1414" height="110" rx="10"/>
+
+  <rect class="agent" x="48" y="975" width="44" height="32" rx="7"/>
+  <text x="104" y="990" font-size="13">agent container</text>
+  <text x="104" y="1009" font-size="12" class="gy">(orange)</text>
+
+  <rect class="svc" x="252" y="975" width="44" height="32" rx="7"/>
+  <text x="308" y="990" font-size="13">ASF service</text>
+  <text x="308" y="1009" font-size="12" class="gy">(blue)</text>
+
+  <rect class="gw" x="432" y="975" width="44" height="32" rx="7"/>
+  <text x="488" y="990" font-size="13">gateway</text>
+  <text x="488" y="1009" font-size="12" class="gy">(purple)</text>
+
+  <rect class="ok" x="592" y="975" width="44" height="32" rx="7"/>
+  <text x="648" y="990" font-size="13">allowed destination</text>
+  <text x="648" y="1009" font-size="12" class="gy">(green)</text>
+
+  <path class="ar" d="M812 991 L862 991"/>
+  <use href="#xm" transform="translate(876 991) scale(0.42)"/>
+  <text x="900" y="990" font-size="13">blocked path</text>
+  <text x="900" y="1009" font-size="12" class="gy">(red)</text>
+
+  <rect class="net" x="1030" y="975" width="44" height="32" rx="7"/>
+  <text x="1086" y="984" font-size="13">internal / routed</text>
+  <text x="1086" y="1001" font-size="13">network</text>
+  <text x="1086" y="1018" font-size="11" class="gy">(pale blue dashed)</text>
+
+  <rect class="ext" x="1230" y="975" width="44" height="32" rx="7"/>
+  <text x="1286" y="984" font-size="13">external network</text>
+  <text x="1286" y="1001" font-size="13">or target</text>
+  <text x="1286" y="1018" font-size="11" class="gy">(light grey dashed)</text>
+</svg>

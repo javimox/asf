@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 1090" font-family="'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="mB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f5fd0"/></marker>
+    <marker id="mG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e8449"/></marker>
+    <marker id="mR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cc2b2b"/></marker>
+    <g id="xm"><path d="M-17 -17L17 17M17 -17L-17 17" stroke="#cc2b2b" stroke-width="11" stroke-linecap="round"/></g>
+    <style>
+      text{fill:#1b1b1b}
+      .agent{fill:#fde8cd;stroke:#e67e22;stroke-width:3.5}
+      .svc{fill:#dcecfa;stroke:#2e6da4;stroke-width:3.5}
+      .ok{fill:#def3e3;stroke:#2e8b57;stroke-width:3.5}
+      .net{fill:#eef5fd;stroke:#6b96e0;stroke-width:2.5;stroke-dasharray:10 8}
+      .ext{fill:#f8f8f8;stroke:#9a9a9a;stroke-width:2.5;stroke-dasharray:10 8}
+      .ab{stroke:#1f5fd0;stroke-width:4;fill:none}
+      .ag{stroke:#1e8449;stroke-width:4;fill:none}
+      .ar{stroke:#cc2b2b;stroke-width:3.5;fill:none;stroke-dasharray:11 9}
+    </style>
+  </defs>
+
+  <text x="725" y="80" text-anchor="middle" font-size="54" font-weight="700">Isolated mode</text>
+
+  <!-- internal network -->
+  <rect class="net" x="55" y="140" width="840" height="400" rx="24"/>
+  <text x="95" y="200" font-size="28" font-style="italic" fill="#1f5fd0">internal network — no gateway</text>
+
+  <!-- agent -->
+  <rect class="agent" x="90" y="290" width="315" height="195" rx="18"/>
+  <text x="247" y="375" text-anchor="middle" font-size="38" font-weight="700">agent</text>
+  <text x="247" y="420" text-anchor="middle" font-size="23">no caps · non-root</text>
+
+  <!-- broker -->
+  <text x="687" y="265" text-anchor="middle" font-size="25">if enabled</text>
+  <rect class="svc" x="530" y="290" width="315" height="195" rx="18"/>
+  <text x="687" y="375" text-anchor="middle" font-size="36" font-weight="700">asf-broker</text>
+  <text x="687" y="423" text-anchor="middle" font-size="23" font-style="italic">optional</text>
+
+  <path class="ab" d="M405 388 L518 388" marker-end="url(#mB)"/>
+
+  <!-- provider network -->
+  <rect class="ext" x="940" y="145" width="475" height="395" rx="20"/>
+  <text x="995" y="203" font-size="26" font-style="italic" fill="#777">provider network</text>
+  <rect class="ok" x="1000" y="290" width="355" height="195" rx="18"/>
+  <text x="1177" y="373" text-anchor="middle" font-size="36" font-weight="700">provider API</text>
+  <text x="1177" y="420" text-anchor="middle" font-size="22">key lives in broker only</text>
+
+  <path class="ag" d="M845 388 L988 388" marker-end="url(#mG)"/>
+
+  <!-- no egress -->
+  <use href="#xm" transform="translate(725 615)"/>
+  <text x="725" y="690" text-anchor="middle" font-size="26" fill="#cc2b2b">no egress network · no proxy · no route</text>
+
+  <!-- no direct internet -->
+  <path class="ar" d="M240 485 C 265 610, 320 715, 415 795" marker-end="url(#mR)"/>
+  <use href="#xm" transform="translate(262 660)"/>
+  <text x="200" y="740" text-anchor="middle" font-size="24" fill="#cc2b2b">no direct</text>
+  <text x="200" y="772" text-anchor="middle" font-size="24" fill="#cc2b2b">internet access</text>
+
+  <rect class="ext" x="435" y="760" width="590" height="165" rx="20"/>
+  <text x="730" y="858" text-anchor="middle" font-size="42" font-weight="700" fill="#333">Internet</text>
+
+  <text x="725" y="1010" text-anchor="middle" font-size="25">No general egress. With the optional broker enabled, LLM requests can still be forwarded externally.</text>
+</svg>

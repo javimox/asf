@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 1090" font-family="'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="mB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f5fd0"/></marker>
+    <marker id="mG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e8449"/></marker>
+    <marker id="mP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7d3c98"/></marker>
+    <marker id="mR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cc2b2b"/></marker>
+    <g id="xm"><path d="M-15 -15L15 15M15 -15L-15 15" stroke="#cc2b2b" stroke-width="10" stroke-linecap="round"/></g>
+    <style>
+      text{fill:#1b1b1b}
+      .agent{fill:#fde8cd;stroke:#e67e22;stroke-width:3.5}
+      .svc{fill:#dcecfa;stroke:#2e6da4;stroke-width:3.5}
+      .gw{fill:#ecdff6;stroke:#7d3c98;stroke-width:3.5}
+      .ok{fill:#def3e3;stroke:#2e8b57;stroke-width:3.5}
+      .bad{fill:#fdf1f0;stroke:#cc2b2b;stroke-width:3.5}
+      .net{fill:#eef5fd;stroke:#6b96e0;stroke-width:2.5;stroke-dasharray:10 8}
+      .ext{fill:#f8f8f8;stroke:#9a9a9a;stroke-width:2.5;stroke-dasharray:10 8}
+      .ab{stroke:#1f5fd0;stroke-width:4;fill:none}
+      .ag{stroke:#1e8449;stroke-width:4;fill:none}
+      .ap{stroke:#7d3c98;stroke-width:4;fill:none}
+      .ar{stroke:#cc2b2b;stroke-width:3.5;fill:none;stroke-dasharray:11 9}
+    </style>
+  </defs>
+
+  <text x="725" y="80" text-anchor="middle" font-size="54" font-weight="700">Routed mode</text>
+
+  <!-- routed network -->
+  <rect class="net" x="35" y="130" width="775" height="730" rx="24"/>
+  <text x="70" y="190" font-size="28" font-style="italic" fill="#1f5fd0">routed network — static routes only</text>
+
+  <!-- agent -->
+  <rect class="agent" x="80" y="250" width="275" height="180" rx="18"/>
+  <text x="217" y="330" text-anchor="middle" font-size="36" font-weight="700">agent</text>
+  <text x="217" y="375" text-anchor="middle" font-size="23">no default route</text>
+
+  <!-- gateway -->
+  <rect class="gw" x="485" y="250" width="270" height="180" rx="18"/>
+  <text x="620" y="315" text-anchor="middle" font-size="34" font-weight="700">gateway</text>
+  <text x="620" y="357" text-anchor="middle" font-size="23">nftables</text>
+  <text x="620" y="393" text-anchor="middle" font-size="23">no caps</text>
+
+  <path class="ap" d="M355 340 L473 340" marker-end="url(#mP)"/>
+
+  <!-- declared targets -->
+  <rect class="ext" x="925" y="135" width="495" height="725" rx="20"/>
+  <text x="985" y="197" font-size="26" font-style="italic" fill="#777">declared targets (LAN / VM)</text>
+
+  <rect class="ok" x="965" y="250" width="410" height="160" rx="18"/>
+  <text x="1170" y="322" text-anchor="middle" font-size="32" font-weight="700">192.0.2.2:18080</text>
+  <text x="1170" y="367" text-anchor="middle" font-size="22">allowed ip · proto · port</text>
+
+  <path class="ag" d="M755 330 L951 330" marker-end="url(#mG)"/>
+
+  <rect class="bad" x="965" y="455" width="410" height="125" rx="18"/>
+  <text x="1170" y="530" text-anchor="middle" font-size="32" font-weight="700" fill="#cc2b2b">anything else</text>
+
+  <path class="ar" d="M755 400 C 830 440, 880 468, 948 505" marker-end="url(#mR)"/>
+  <use href="#xm" transform="translate(852 452)"/>
+
+  <!-- broker -->
+  <rect class="svc" x="370" y="610" width="305" height="180" rx="18"/>
+  <text x="522" y="678" text-anchor="middle" font-size="34" font-weight="700">asf-broker</text>
+  <text x="522" y="718" text-anchor="middle" font-size="23">LiteLLM</text>
+  <text x="522" y="752" text-anchor="middle" font-size="23" font-style="italic">optional</text>
+
+  <path class="ab" d="M218 430 L218 700 L358 700" marker-end="url(#mB)"/>
+  <text x="240" y="748" font-size="24" fill="#1f5fd0">session token</text>
+
+  <rect class="ok" x="965" y="635" width="410" height="150" rx="18"/>
+  <text x="1170" y="702" text-anchor="middle" font-size="32" font-weight="700">provider API</text>
+  <text x="1170" y="745" text-anchor="middle" font-size="22">optional via broker</text>
+
+  <path class="ag" d="M675 705 L951 705" marker-end="url(#mG)"/>
+
+  <!-- captions -->
+  <text x="420" y="925" text-anchor="middle" font-size="26">policy loaded by a short-lived</text>
+  <text x="420" y="960" text-anchor="middle" font-size="26">NET_ADMIN initializer that exits —</text>
+  <text x="420" y="995" text-anchor="middle" font-size="26">its absence is verified</text>
+
+  <text x="1170" y="945" text-anchor="middle" font-size="28" font-weight="700" fill="#cc2b2b">deny-by-default, all three chains</text>
+</svg>

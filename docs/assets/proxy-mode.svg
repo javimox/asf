@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 1090" font-family="'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="mB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f5fd0"/></marker>
+    <marker id="mG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e8449"/></marker>
+    <marker id="mR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cc2b2b"/></marker>
+    <g id="xm"><path d="M-15 -15L15 15M15 -15L-15 15" stroke="#cc2b2b" stroke-width="10" stroke-linecap="round"/></g>
+    <style>
+      text{fill:#1b1b1b}
+      .agent{fill:#fde8cd;stroke:#e67e22;stroke-width:3.5}
+      .svc{fill:#dcecfa;stroke:#2e6da4;stroke-width:3.5}
+      .ok{fill:#def3e3;stroke:#2e8b57;stroke-width:3.5}
+      .net{fill:#eef5fd;stroke:#6b96e0;stroke-width:2.5;stroke-dasharray:10 8}
+      .ext{fill:#f8f8f8;stroke:#9a9a9a;stroke-width:2.5;stroke-dasharray:10 8}
+      .ab{stroke:#1f5fd0;stroke-width:4;fill:none}
+      .ag{stroke:#1e8449;stroke-width:4;fill:none}
+      .ar{stroke:#cc2b2b;stroke-width:3.5;fill:none;stroke-dasharray:11 9}
+    </style>
+  </defs>
+
+  <text x="725" y="80" text-anchor="middle" font-size="54" font-weight="700">Proxy mode</text>
+
+  <!-- internal network -->
+  <rect class="net" x="30" y="150" width="820" height="800" rx="24"/>
+  <text x="70" y="207" font-size="28" font-style="italic" fill="#1f5fd0">internal network — no gateway</text>
+
+  <!-- agent -->
+  <rect class="agent" x="60" y="380" width="285" height="205" rx="18"/>
+  <text x="202" y="470" text-anchor="middle" font-size="38" font-weight="700">agent</text>
+  <text x="202" y="515" text-anchor="middle" font-size="23">no caps · non-root</text>
+
+  <!-- asf-proxy -->
+  <rect class="svc" x="545" y="290" width="260" height="175" rx="18"/>
+  <text x="675" y="362" text-anchor="middle" font-size="36" font-weight="700">asf-proxy</text>
+  <text x="675" y="408" text-anchor="middle" font-size="24">Caddy</text>
+
+  <path class="ab" d="M345 400 L533 385" marker-end="url(#mB)"/>
+  <text x="440" y="360" text-anchor="middle" font-size="24">CONNECT</text>
+
+  <!-- egress network -->
+  <rect class="ext" x="990" y="190" width="430" height="335" rx="20"/>
+  <text x="1040" y="242" font-size="26" font-style="italic" fill="#777">egress network</text>
+  <rect class="ok" x="1050" y="290" width="315" height="180" rx="18"/>
+  <text x="1207" y="368" text-anchor="middle" font-size="34" font-weight="700">Internet</text>
+  <text x="1207" y="412" text-anchor="middle" font-size="23">allowlist · :443 only</text>
+
+  <path class="ag" d="M805 377 L1038 377" marker-end="url(#mG)"/>
+
+  <!-- blocked direct path -->
+  <path class="ar" d="M350 545 L950 545" marker-end="url(#mR)"/>
+  <use href="#xm" transform="translate(665 545)"/>
+  <text x="665" y="605" text-anchor="middle" font-size="24" fill="#cc2b2b">direct internet access blocked</text>
+
+  <!-- asf-broker -->
+  <rect class="svc" x="480" y="690" width="295" height="190" rx="18"/>
+  <text x="627" y="758" text-anchor="middle" font-size="34" font-weight="700">asf-broker</text>
+  <text x="627" y="802" text-anchor="middle" font-size="24">LiteLLM</text>
+  <text x="627" y="842" text-anchor="middle" font-size="23" font-style="italic">optional</text>
+
+  <path class="ab" d="M215 585 L465 767" marker-end="url(#mB)"/>
+  <text x="290" y="815" text-anchor="middle" font-size="24">session token</text>
+
+  <!-- provider network -->
+  <rect class="ext" x="990" y="600" width="430" height="330" rx="20"/>
+  <text x="1040" y="652" font-size="26" font-style="italic" fill="#777">provider network</text>
+  <rect class="ok" x="1050" y="695" width="315" height="185" rx="18"/>
+  <text x="1207" y="772" text-anchor="middle" font-size="34" font-weight="700">provider API</text>
+  <text x="1207" y="816" text-anchor="middle" font-size="22">key lives in broker only</text>
+
+  <path class="ag" d="M775 787 L1038 787" marker-end="url(#mG)"/>
+</svg>
