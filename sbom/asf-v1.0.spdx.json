@@ -2,14 +2,14 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "annotations": [
     {
-      "annotationDate": "2026-08-12T22:13:54Z",
+      "annotationDate": "2026-08-13T21:01:24Z",
       "annotationType": "OTHER",
       "annotator": "Tool: tools/generate_sbom.py",
       "comment": "Source/deployment inventory only; container image layers were not scanned."
     }
   ],
   "creationInfo": {
-    "created": "2026-08-12T22:13:54Z",
+    "created": "2026-08-13T21:01:24Z",
     "creators": [
       "Tool: tools/generate_sbom.py"
     ]
@@ -18,7 +18,7 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/1.0/0a6799872853a26b",
+  "documentNamespace": "https://asf.invalid/spdx/1.0/e4cf1f224808c8c5",
   "name": "ASF-1.0-source-deployment-inventory",
   "packages": [
     {
@@ -26,10 +26,10 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "0a6799872853a26b40685910fe61879c3d5da9a4ff64f5cf8d742b8b59710217"
+          "checksumValue": "e4cf1f224808c8c53eeacb7462e0a97a5ab941e866903b8ca503eca844dccfd4"
         }
       ],
-      "comment": "Deterministic source-tree digest over 200 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
+      "comment": "Deterministic source-tree digest over 201 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
       "copyrightText": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -37,7 +37,7 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "0a6799872853a26b40685910fe61879c3d5da9a4ff64f5cf8d742b8b59710217"
+        "packageVerificationCodeValue": "e4cf1f224808c8c53eeacb7462e0a97a5ab941e866903b8ca503eca844dccfd4"
       },
       "versionInfo": "1.0"
     }
