@@ -124,6 +124,10 @@ RUN set -eu; \
         -x; \
     rm /tmp/zsh-in-docker.sh
 
+COPY --chown=node:node \
+    agents/hermes/patches/gpt-5.6-reasoning-none.patch \
+    /tmp/hermes-gpt-5.6-reasoning-none.patch
+
 # ── Agent install (only the selected agent) ───────────────────────────────────
 ARG AGENT=claude
 RUN set -eu; \
