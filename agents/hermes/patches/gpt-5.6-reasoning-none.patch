@@ -1,0 +1,34 @@
+diff --git a/agent/transports/chat_completions.py b/agent/transports/chat_completions.py
+--- a/agent/transports/chat_completions.py
++++ b/agent/transports/chat_completions.py
+@@ -328,6 +328,16 @@ class ChatCompletionsTransport(ProviderTransport):
+         is_tokenhub = params.get("is_tokenhub", False)
+         reasoning_config = params.get("reasoning_config")
+
++        # GPT-5.6 explicit reasoning_effort=none compatibility.
++        # Hermes represents config `none` as {"enabled": False}, but omitting
++        # the API field makes GPT-5.6 fall back to its default reasoning mode.
++        if (
++            "gpt-5.6" in (model or "").lower()
++            and isinstance(reasoning_config, dict)
++            and reasoning_config.get("enabled") is False
++        ):
++            api_kwargs["reasoning_effort"] = "none"
++
+         if ephemeral is not None and max_tokens_fn:
+             api_kwargs.update(max_tokens_fn(ephemeral))
+         elif max_tokens is not None and max_tokens_fn:
+@@ -539,6 +549,14 @@ class ChatCompletionsTransport(ProviderTransport):
+         )
+         api_kwargs.update(top_level_from_profile)
+
++        # GPT-5.6 explicit reasoning_effort=none compatibility.
++        if (
++            "gpt-5.6" in (model or "").lower()
++            and isinstance(reasoning_config, dict)
++            and reasoning_config.get("enabled") is False
++        ):
++            api_kwargs["reasoning_effort"] = "none"
++
+         # extra_body assembly
+         extra_body: dict[str, Any] = {}
