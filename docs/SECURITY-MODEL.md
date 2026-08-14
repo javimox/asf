@@ -2,7 +2,7 @@
 
 This document describes ASF's defense-in-depth controls and important
 limitations. For the concise trust boundary and threat-model summary, start with
-[TRUST.md](../TRUST.md).
+[TRUST.md](TRUST.md).
 
 ## Security model — what each layer does
 
@@ -130,7 +130,7 @@ denial of an allowlisted host still aborts as a policy misconfiguration. The
 full check-by-check verdict is persisted to
 `.devcontainer/sessions/<agent>/verification-report.json`. Routed startup
 exercises TCP end to end; UDP and ICMP rules retain unit and spike coverage. See `agents/isolated-worker/runtime.yml`,
-`examples/routed-runtime.yml`, and [TESTING.md](TESTING.md).
+`docs/examples/routed-runtime.yml`, and [TESTING.md](TESTING.md).
 
 ### Evidence-driven allowlist review
 

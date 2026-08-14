@@ -2,14 +2,14 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "annotations": [
     {
-      "annotationDate": "2026-08-13T21:01:24Z",
+      "annotationDate": "2026-08-14T20:45:19Z",
       "annotationType": "OTHER",
       "annotator": "Tool: tools/generate_sbom.py",
       "comment": "Source/deployment inventory only; container image layers were not scanned."
     }
   ],
   "creationInfo": {
-    "created": "2026-08-13T21:01:24Z",
+    "created": "2026-08-14T20:45:19Z",
     "creators": [
       "Tool: tools/generate_sbom.py"
     ]
@@ -18,7 +18,7 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/1.0/e4cf1f224808c8c5",
+  "documentNamespace": "https://asf.invalid/spdx/1.0/1497242b19eede30",
   "name": "ASF-1.0-source-deployment-inventory",
   "packages": [
     {
@@ -26,7 +26,7 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "e4cf1f224808c8c53eeacb7462e0a97a5ab941e866903b8ca503eca844dccfd4"
+          "checksumValue": "1497242b19eede30f64f458082b6fd583e646a10e3e10a76eef22f0d9bfe3fa5"
         }
       ],
       "comment": "Deterministic source-tree digest over 201 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
@@ -37,7 +37,7 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "e4cf1f224808c8c53eeacb7462e0a97a5ab941e866903b8ca503eca844dccfd4"
+        "packageVerificationCodeValue": "1497242b19eede30f64f458082b6fd583e646a10e3e10a76eef22f0d9bfe3fa5"
       },
       "versionInfo": "1.0"
     }

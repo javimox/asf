@@ -106,7 +106,7 @@ On the target host:
 python3 tools/routed_test_target.py --allowed-port 18080 --blocked-port 19999
 ```
 
-Copy `examples/routed-runtime.yml` to `agents/<name>/runtime.yml`, adjust the
+Copy `docs/examples/routed-runtime.yml` to `agents/<name>/runtime.yml`, adjust the
 address/CIDR, then run:
 
 ```bash

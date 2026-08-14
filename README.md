@@ -125,7 +125,7 @@ The full documentation is organized under [docs/](docs/README.md):
   repository access, file ownership, Git workflow, and everyday usage
 - [Runtime configuration](docs/RUNTIME-CONFIGURATION.md) — secrets, persistence,
   LiteLLM, manifests, generic runtimes, and multiple sessions
-- [Trust model](TRUST.md) — what ASF protects, what it does not, and the
+- [Trust model](docs/TRUST.md) — what ASF protects, what it does not, and the
   privileges it relies on
 - [Security model](docs/SECURITY-MODEL.md) — defense-in-depth controls,
   hardening, network modes, limitations, and enforcement evidence
@@ -138,8 +138,8 @@ The full documentation is organized under [docs/](docs/README.md):
 - [Dependencies and SBOM scope](docs/DEPENDENCIES.md)
 - [Testing](docs/TESTING.md)
 - [Releasing](docs/RELEASING.md)
-- [Security policy](SECURITY.md)
-- [Known bugs](BUGS.md)
+- [Security policy](docs/SECURITY.md)
+- [Known bugs](docs/BUGS.md)
 
 ## Contributing
 

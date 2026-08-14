@@ -9,7 +9,11 @@ implementation material lives here.
   repository access, file ownership, Git workflow, and everyday usage
 - [Runtime configuration](RUNTIME-CONFIGURATION.md) — secrets, persistence,
   LiteLLM, runtime manifests, generic Python agents, and concurrent sessions
-- [Trust model](../TRUST.md) — concise trust boundaries and threat model
+- [LiteLLM broker](BROKER.md) — brokered provider credentials, model routing,
+  and broker diagnostics
+- [Routed runtime example](examples/routed-runtime.yml) — example manifest for
+  routed-mode target access
+- [Trust model](TRUST.md) — concise trust boundaries and threat model
 - [Security model](SECURITY-MODEL.md) — defense-in-depth controls, hardening,
   network modes, known limitations, and enforcement evidence
 
@@ -27,5 +31,5 @@ implementation material lives here.
 
 - [Testing](TESTING.md) — unit, shell, integration, and host tests
 - [Releasing](RELEASING.md) — release preparation and checks
-- [Security policy](../SECURITY.md) — reporting security issues
-- [Known bugs](../BUGS.md) — currently known limitations or defects
+- [Security policy](SECURITY.md) — reporting security issues
+- [Known bugs](BUGS.md) — currently known limitations or defects
