@@ -145,7 +145,7 @@ class RuntimeCommandTests(unittest.TestCase):
             root = Path(temporary) / "checkout"
             paths = create_checkout(
                 root,
-                ROOT / "examples" / "routed-runtime.yml",
+                ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml",
                 "routed-scanner",
             )
             with mock.patch.object(RuntimeService, "open", return_value=23) as opened:
@@ -159,7 +159,7 @@ class RuntimeCommandTests(unittest.TestCase):
             root = Path(temporary) / "checkout"
             paths = create_checkout(
                 root,
-                ROOT / "examples" / "routed-runtime.yml",
+                ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml",
                 "routed-scanner",
             )
             manifest = load_model(paths.identity.runtime_manifest("routed-scanner"))

@@ -79,7 +79,7 @@ class RuntimePlanContractTests(unittest.TestCase):
                         )
 
     def test_routed_network_options_are_frozen(self) -> None:
-        manifest = load_model(ROOT / "examples" / "routed-runtime.yml")
+        manifest = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         plan = build_runtime_plan(
             manifest, paths=self.paths, owner_pid=4242,
             broker_globally_enabled=False,

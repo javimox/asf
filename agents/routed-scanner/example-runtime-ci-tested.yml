@@ -1,3 +1,7 @@
+# CI-tested routed runtime template.
+# This file is used by the test suite under tests/. Keep it as a stable example;
+# agents/routed-scanner/runtime.yml is the editable runtime configuration.
+
 # Example routed runtime — the addresses below are PLACEHOLDERS.
 #
 # 192.0.2.0/24 is TEST-NET-1 (RFC 5737), reserved for documentation. It is not

@@ -55,7 +55,7 @@ class NetworkFixture(unittest.TestCase):
         )
 
     def routed_plan(self):
-        manifest = load_model(ROOT / "examples" / "routed-runtime.yml")
+        manifest = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         return build_runtime_plan(
             manifest,
             paths=self.paths,

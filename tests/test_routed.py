@@ -37,7 +37,7 @@ class RoutedFixture(unittest.TestCase):
         allow_persistent: bool = False,
     ) -> RoutedRequest:
         paths = RepoPaths.for_root(ROOT if root is None else root)
-        manifest = load_model(ROOT / "examples" / "routed-runtime.yml")
+        manifest = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         plan = build_runtime_plan(
             manifest,
             paths=paths,

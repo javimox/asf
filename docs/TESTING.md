@@ -106,8 +106,8 @@ On the target host:
 python3 tools/routed_test_target.py --allowed-port 18080 --blocked-port 19999
 ```
 
-Copy `docs/examples/routed-runtime.yml` to `agents/<name>/runtime.yml`, adjust the
-address/CIDR, then run:
+Copy `agents/routed-scanner/example-runtime-ci-tested.yml` to
+`agents/<name>/runtime.yml`, adjust the address/CIDR, then run:
 
 ```bash
 ./sandbox.sh open <name>

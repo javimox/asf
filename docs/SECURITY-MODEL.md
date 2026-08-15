@@ -130,7 +130,7 @@ denial of an allowlisted host still aborts as a policy misconfiguration. The
 full check-by-check verdict is persisted to
 `.devcontainer/sessions/<agent>/verification-report.json`. Routed startup
 exercises TCP end to end; UDP and ICMP rules retain unit and spike coverage. See `agents/isolated-worker/runtime.yml`,
-`docs/examples/routed-runtime.yml`, and [TESTING.md](TESTING.md).
+`agents/routed-scanner/example-runtime-ci-tested.yml`, and [TESTING.md](TESTING.md).
 
 ### Evidence-driven allowlist review
 

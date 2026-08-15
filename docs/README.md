@@ -11,7 +11,7 @@ implementation material lives here.
   LiteLLM, runtime manifests, generic Python agents, and concurrent sessions
 - [LiteLLM broker](BROKER.md) — brokered provider credentials, model routing,
   and broker diagnostics
-- [Routed runtime example](examples/routed-runtime.yml) — example manifest for
+- [CI-tested routed runtime template](../agents/routed-scanner/example-runtime-ci-tested.yml) — example manifest for
   routed-mode target access
 - [Trust model](TRUST.md) — concise trust boundaries and threat model
 - [Security model](SECURITY-MODEL.md) — defense-in-depth controls, hardening,

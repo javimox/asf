@@ -93,7 +93,7 @@ class RuntimePlanTests(unittest.TestCase):
         )
 
     def test_routed_topology_uses_the_explicit_allocation(self) -> None:
-        manifest = load_model(ROOT / "examples" / "routed-runtime.yml")
+        manifest = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         plan = build_runtime_plan(
             manifest,
             paths=self.paths,
@@ -130,7 +130,7 @@ class RuntimePlanTests(unittest.TestCase):
         )
 
     def test_routed_allocation_is_explicit_and_mode_scoped(self) -> None:
-        routed = load_model(ROOT / "examples" / "routed-runtime.yml")
+        routed = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         with self.assertRaises(RuntimePlanError):
             build_runtime_plan(
                 routed,
@@ -229,7 +229,7 @@ class RuntimePlanInvariantTests(unittest.TestCase):
         )
 
     def routed_plan(self):
-        manifest = load_model(ROOT / "examples" / "routed-runtime.yml")
+        manifest = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         return build_runtime_plan(
             manifest,
             paths=self.paths,
