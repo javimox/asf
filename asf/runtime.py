@@ -948,6 +948,7 @@ class RuntimeService:
                 timeout=1800,
                 output=self.output,
                 error=self.error,
+                inherit_stdin=False,
                 env=environment,
                 redact_values=tuple(environment.values()),
             )
