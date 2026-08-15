@@ -5,38 +5,16 @@
 
 A rootless, daemonless Podman-based orchestration framework for sandboxing AI agents.
 
-ASF was born as a Master's degree thesis, but the original idea evolved far
-beyond its initial scope through many hours of design, experimentation, and
-development. I hope you enjoy using it as much as I enjoyed designing and
-building it.
-
-## How it works in 60 seconds
-
-`sandbox.sh` is a command-line tool, not a daemon. When you open a session, ASF
-generates the runtime configuration, starts the required supporting services,
-and launches a locked-down agent container using rootless Podman.
-
-Depending on the runtime policy, the agent can receive explicitly selected
-repositories, controlled outbound access through Caddy, optional LLM access
-through an ephemeral LiteLLM broker, declared persistent state, and bounded
-resources. On exit, ephemeral resources are removed while only declared state
-volumes remain.
-
-### Network modes
-
-<p align="center">
-  <img src="docs/assets/network-modes.svg" alt="ASF proxy, isolated, and routed network modes">
-</p>
-
-ASF supports `proxy`, `isolated`, and `routed` network modes. The detailed
-security properties and per-mode diagrams are documented in
-[Security model](docs/SECURITY-MODEL.md#network-modes).
-
 ## Demo
 
 <p align="center">
   <img src="docs/assets/asf-demo-small.gif" alt="ASF terminal demo">
 </p>
+
+ASF was born as a Master's degree thesis, but the original idea evolved far
+beyond its initial scope through many hours of design, experimentation, and
+development. I hope you enjoy using it as much as I enjoyed designing and
+building it.
 
 ## Quick start
 
