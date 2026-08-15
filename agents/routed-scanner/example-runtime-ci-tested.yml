@@ -1,7 +1,6 @@
 # CI-tested routed runtime template.
 # This file is used by the test suite under tests/. Keep it as a stable example;
 # agents/routed-scanner/runtime.yml is the editable runtime configuration.
-
 # Example routed runtime — the addresses below are PLACEHOLDERS.
 #
 # 192.0.2.0/24 is TEST-NET-1 (RFC 5737), reserved for documentation. It is not
@@ -15,7 +14,7 @@
 #   2. It needs TWO open TCP ports: one you allow, and one you deliberately do
 #      NOT allow. The blocked port must be OPEN on the target — ASF refuses to
 #      treat an unreachable closed port as proof of enforcement.
-#      A ready-made target:  python3 tools/routed_test_target.py --help
+#      A ready-made target:  python3 tests/helpers/routed_test_target.py --help
 #   3. Replace every 192.0.2.10 below, and both port numbers.
 #
 # ASF verifies this before the runtime starts and aborts if the allowed port is

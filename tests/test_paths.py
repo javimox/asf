@@ -129,7 +129,7 @@ class LayoutTests(unittest.TestCase):
             "devcontainer_base": (
                 root / ".devcontainer" / "devcontainer.base.json"
             ),
-            "broker_test_tool": root / "tools" / "test_broker.py",
+            "broker_probe_tool": root / "tools" / "broker_probe.py",
             "litellm_entrypoint": root / "tools" / "litellm_entrypoint.py",
         }
         for name, value in expected.items():

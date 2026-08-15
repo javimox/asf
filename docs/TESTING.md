@@ -103,11 +103,11 @@ enforcement from a closed service.
 On the target host:
 
 ```bash
-python3 tools/routed_test_target.py --allowed-port 18080 --blocked-port 19999
+python3 tests/helpers/routed_test_target.py --allowed-port 18080 --blocked-port 19999
 ```
 
-Copy `agents/routed-scanner/example-runtime-ci-tested.yml` to
-`agents/<name>/runtime.yml`, adjust the address/CIDR, then run:
+Copy `agents/routed-scanner/example-runtime-ci-tested.yml` to `agents/<name>/runtime.yml`, adjust the
+address/CIDR, then run:
 
 ```bash
 ./sandbox.sh open <name>

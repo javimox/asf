@@ -24,7 +24,7 @@ if [[ -n "${ASF_ROUTED_TARGET_IP:-}" && \
     bash "$ROOT/tests/test_routed_integration.sh"
 else
     echo "run-host.sh: external routed test skipped"
-    echo "  Start tools/routed_test_target.py on the target and set:"
+    echo "  Start tests/helpers/routed_test_target.py on the target and set:"
     echo "  ASF_ROUTED_TARGET_IP, ASF_ROUTED_ALLOWED_PORT, ASF_ROUTED_BLOCKED_PORT"
 fi
 

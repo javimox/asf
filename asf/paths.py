@@ -182,8 +182,8 @@ class RepoPaths:
         return self.devcontainer_dir / "devcontainer.base.json"
 
     @property
-    def broker_test_tool(self) -> Path:
-        return self.tools_dir / "test_broker.py"
+    def broker_probe_tool(self) -> Path:
+        return self.tools_dir / "broker_probe.py"
 
     @property
     def litellm_entrypoint(self) -> Path:

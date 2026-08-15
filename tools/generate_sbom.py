@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SBOM_DIR = ROOT / "sbom"
+SBOM_DIR = ROOT / "docs" / "sbom"
 
 _EXCLUDED_DIRS = {
     ".git",
@@ -52,7 +52,7 @@ def _excluded(path: Path) -> bool:
         return True
     if any(part.endswith(".egg-info") for part in parts):
         return True
-    if parts[0] == "sbom":
+    if parts[:2] == ("docs", "sbom"):
         return True
     if path.name in _EXCLUDED_NAMES or path.suffix in _EXCLUDED_SUFFIXES:
         return True
@@ -121,7 +121,7 @@ def _document(file_count: int, tree_digest: str, newest_mtime: float) -> dict:
                     "files using sorted SHA-256 file digests and relative "
                     "paths; excludes generated caches, build outputs, "
                     "session artifacts, local .claude settings, and the "
-                    "sbom/ directory itself. Regenerate with "
+                    "docs/sbom/ directory itself. Regenerate with "
                     "tools/generate_sbom.py."
                 ),
                 "copyrightText": "NOASSERTION",

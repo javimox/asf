@@ -43,7 +43,7 @@ from asf.runtime_plan import (
 from asf.session import SessionRole
 
 ROOT = Path(__file__).resolve().parents[1]
-BROKER_TEST = ROOT / "tools" / "test_broker.py"
+BROKER_PROBE = ROOT / "tools" / "broker_probe.py"
 
 
 def import_module(path: Path, name: str):
@@ -490,7 +490,7 @@ class ProductionBoundaryTests(unittest.TestCase):
 
 class BrokerDiagnosticTests(unittest.TestCase):
     def test_hermes_payload(self) -> None:
-        module = import_module(BROKER_TEST, "broker_test_tool")
+        module = import_module(BROKER_PROBE, "broker_probe_tool")
         endpoint, payload = module.request_payload("hermes", "gpt-5.5")
         self.assertEqual(endpoint, "/v1/chat/completions")
         self.assertEqual(payload["max_completion_tokens"], 128)

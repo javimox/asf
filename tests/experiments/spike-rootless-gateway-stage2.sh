@@ -67,7 +67,7 @@ ports: one to allow, and one to leave undeclared (the negative control must be
 open, or "unreachable" proves nothing).
 
 A ready-made target, run on the target host:
-    python3 tools/routed_test_target.py --allowed-port 18080 --blocked-port 19999
+    python3 tests/helpers/routed_test_target.py --allowed-port 18080 --blocked-port 19999
 
 Then:
     TARGET_IP=<address> TARGET_ROUTE=<address>/32 <this-script>

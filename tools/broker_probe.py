@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send a minimal diagnostic request from inside the LiteLLM container."""
+"""Probe the running LiteLLM broker for ``sandbox.sh broker test`` diagnostics."""
 
 from __future__ import annotations
 

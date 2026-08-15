@@ -24,7 +24,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertEqual(match.group(1), __version__)
 
     def test_source_sbom_describes_the_release(self) -> None:
-        path = ROOT / "sbom" / "asf-v1.0.spdx.json"
+        path = ROOT / "docs" / "sbom" / "asf-v1.0.spdx.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(data["spdxVersion"], "SPDX-2.3")
         self.assertIn("SPDXRef-Package-ASF", data["documentDescribes"])

@@ -255,7 +255,7 @@ def _run_broker(
                     "specify the model to test.\n"
                 ),
             )
-        script = _read_broker_test_tool(paths.broker_test_tool)
+        script = _read_broker_probe_tool(paths.broker_probe_tool)
         result = podman.observe(
             (
                 podman.engine,
@@ -359,13 +359,13 @@ def _broker_container_id(
     )
 
 
-def _read_broker_test_tool(path: Path) -> str:
+def _read_broker_probe_tool(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
-        raise DiagnosticsError(f"Broker test tool is missing or unsafe: {path}")
+        raise DiagnosticsError(f"Broker probe is missing or unsafe: {path}")
     try:
         return path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise DiagnosticsError(f"Cannot read broker test tool: {path}: {exc}") from exc
+        raise DiagnosticsError(f"Cannot read broker probe: {path}: {exc}") from exc
 
 
 def _parse_caddy_policy(policy: str) -> tuple[str, tuple[str, ...]]:

@@ -200,7 +200,7 @@ data cannot leave through trusted internal services.
 bash tests/run-host.sh
 ```
 
-For routed end-to-end testing, start `tools/routed_test_target.py` on the target
+For routed end-to-end testing, start `tests/helpers/routed_test_target.py` on the target
 and provide the `ASF_ROUTED_*` variables described in `docs/TESTING.md`.
 
 ### Explicit proxy and route evidence
