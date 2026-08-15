@@ -8,7 +8,7 @@ A rootless, daemonless Podman-based orchestration framework for sandboxing AI ag
 ## Demo
 
 <p align="center">
-  <img src="docs/assets/asf-demo-small.gif" alt="ASF terminal demo">
+  <img src="docs/assets/asf-demo.gif" alt="ASF terminal demo">
 </p>
 
 ASF was born as a Master's degree thesis, but the original idea evolved far

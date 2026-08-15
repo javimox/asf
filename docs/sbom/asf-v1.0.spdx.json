@@ -2,14 +2,14 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "annotations": [
     {
-      "annotationDate": "2026-08-15T20:30:04Z",
+      "annotationDate": "2026-08-15T23:55:49Z",
       "annotationType": "OTHER",
       "annotator": "Tool: tools/generate_sbom.py",
       "comment": "Source/deployment inventory only; container image layers were not scanned."
     }
   ],
   "creationInfo": {
-    "created": "2026-08-15T20:30:04Z",
+    "created": "2026-08-15T23:55:49Z",
     "creators": [
       "Tool: tools/generate_sbom.py"
     ]
@@ -18,7 +18,7 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/1.0/6e102e4660d488d1",
+  "documentNamespace": "https://asf.invalid/spdx/1.0/0785f6d1d477316b",
   "name": "ASF-1.0-source-deployment-inventory",
   "packages": [
     {
@@ -26,10 +26,10 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "6e102e4660d488d1df3447f42a5867787e5fb6b893e67e12e40934160e9f26a0"
+          "checksumValue": "0785f6d1d477316bc2beb737f4c76192b1efaaec8247a1ad5e700b6a9113694c"
         }
       ],
-      "comment": "Deterministic source-tree digest over 201 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the docs/sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
+      "comment": "Deterministic source-tree digest over 200 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the docs/sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
       "copyrightText": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -37,7 +37,7 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "6e102e4660d488d1df3447f42a5867787e5fb6b893e67e12e40934160e9f26a0"
+        "packageVerificationCodeValue": "0785f6d1d477316bc2beb737f4c76192b1efaaec8247a1ad5e700b6a9113694c"
       },
       "versionInfo": "1.0"
     }
