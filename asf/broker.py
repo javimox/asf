@@ -488,6 +488,8 @@ class BrokerService:
             "--read-only",
             "--tmpfs",
             "/tmp:rw,nosuid,nodev,size=64m",
+            "--tmpfs",
+            "/run/secrets:rw,nosuid,nodev,noexec,size=1m,mode=0755",
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--pids-limit=256",
