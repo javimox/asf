@@ -30,6 +30,7 @@ from .paths import RepoPaths
 from .podman import PodmanClient
 from .residue import ResidueScanner, SessionResidue
 from .session_lock import AcquiredSessionLock
+from .session_events import record_session_event
 from .session import (
     RuntimeSession,
     SessionDiscovery,
@@ -275,6 +276,12 @@ _GROUPS: tuple[tuple[str, tuple[ResourceKind, ...], str, str], ...] = (
         "Egress proxy removed",
     ),
     (
+        "network-observer",
+        (ResourceKind.NETWORK_OBSERVER_CONTAINER,),
+        "Stopping and removing network observer",
+        "Network observer removed",
+    ),
+    (
         "gateway",
         (ResourceKind.GATEWAY_INIT_CONTAINER, ResourceKind.GATEWAY_CONTAINER),
         "Stopping and removing routed gateway",
@@ -377,14 +384,28 @@ class StopService:
     ) -> StopReport:
         """Stop one session and persist its cleanup record, best-effort."""
 
-        report = self._stop_runtime(
-            runtime,
-            emitter=emitter,
-            acquired_lock=acquired_lock,
-        )
+        if self.paths is not None:
+            record_session_event(self.paths, runtime, "cleanup_started")
+        try:
+            report = self._stop_runtime(
+                runtime,
+                emitter=emitter,
+                acquired_lock=acquired_lock,
+            )
+        except Exception:
+            if self.paths is not None:
+                record_session_event(self.paths, runtime, "cleanup_failed")
+            raise
         if report.succeeded:
             self._finalize_egress_evidence(report.runtime, emitter)
         self._persist_stop_report(report, emitter)
+        if self.paths is not None:
+            record_session_event(
+                self.paths,
+                report.runtime,
+                "cleanup_complete",
+                disposition=report.disposition.value,
+            )
         return report
 
     def _finalize_egress_evidence(

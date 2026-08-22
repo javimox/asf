@@ -93,6 +93,7 @@ class AsfConfigTests(unittest.TestCase):
             ),
         )
         self.assertIn("--pids-limit=256", arguments)
+        self.assertFalse(any(item.startswith("--ulimit=nproc=") for item in arguments))
         self.assertIn("--memory=3g", arguments)
         self.assertIn("--tmpfs=/run:rw,nosuid,nodev,noexec,size=64m", arguments)
         self.assertIn("--ipc=private", arguments)

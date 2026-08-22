@@ -39,6 +39,7 @@ from .models import (
     EnvironmentVariable,
     LlmSettings,
     NetworkPolicy,
+    ObservabilitySettings,
     RoutedRule,
     RoutedVerification,
     RuntimeManifest,
@@ -75,6 +76,7 @@ MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 SECRET_FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 PROTOCOLS = ("anthropic", "openai")
 MODES = ("interactive", "service")
+ISOLATIONS = ("container", "microvm")
 
 # key -> (type, required). Nested sections are validated by the functions below.
 TOP_LEVEL = {
@@ -86,10 +88,11 @@ TOP_LEVEL = {
     "llm": (dict, False),
     "secrets": (dict, False),
     "network": (dict, False),
+    "observability": (dict, False),
     "env": (dict, False),
     "capabilities": (list, False),
 }
-RUNTIME_KEYS = {"build", "command", "mode"}
+RUNTIME_KEYS = {"build", "command", "isolation", "mode"}
 BUILD_KEYS = {"args"}
 DEPLOYMENT_BUILD_ARGS = {
     "AGENT",
@@ -109,9 +112,10 @@ STATE_KEYS = {"key", "target"}
 LLM_KEYS = {"broker", "protocol", "provider", "api_key_env", "direct_domain", "models"}
 SECRETS_KEYS = {"files"}
 NETWORK_KEYS = {"mode", "allow_domains", "verify_domain", "allow", "verify"}
+OBSERVABILITY_KEYS = {"llm_prompts", "network_activity"}
 NETWORK_MODES = ("isolated", "proxy", "routed")
 ROUTED_RULE_KEYS = {"cidr", "protocol", "ports"}
-VERIFY_KEYS = {"address", "protocol", "port", "blocked_port"}
+VERIFY_KEYS = {"address", "protocol", "port", "blocked_port", "blocked_address"}
 ROUTED_PROTOCOLS = ("tcp", "udp", "icmp_echo")
 
 # Closed vocabulary. NET_ADMIN is deliberately absent: enforcement lives
@@ -200,6 +204,11 @@ def validate(data: Any) -> dict[str, Any]:
     mode = runtime.get("mode", "interactive")
     if mode not in MODES:
         raise ManifestError(f"runtime.mode must be one of {MODES}, got {mode!r}")
+    isolation = runtime.get("isolation", "container")
+    if isolation not in ISOLATIONS:
+        raise ManifestError(
+            f"runtime.isolation must be one of {ISOLATIONS}, got {isolation!r}"
+        )
     if "command" in runtime:
         command = _str_list("runtime.command", runtime["command"])
         if not command or any(not item for item in command):
@@ -315,6 +324,20 @@ def validate(data: Any) -> dict[str, Any]:
             if len(models) != len(set(models)):
                 raise ManifestError("llm.models must not contain duplicates")
 
+    observability = data.get("observability", {})
+    _reject_unknown("observability", observability, OBSERVABILITY_KEYS)
+    llm_prompts = observability.get("llm_prompts", False)
+    if not isinstance(llm_prompts, bool):
+        raise ManifestError("observability.llm_prompts must be true or false")
+    if llm_prompts and not (llm and llm.get("broker", True)):
+        raise ManifestError(
+            "observability.llm_prompts requires llm.broker: true; "
+            "prompt capture happens at the LiteLLM broker"
+        )
+    network_activity = observability.get("network_activity", False)
+    if not isinstance(network_activity, bool):
+        raise ManifestError("observability.network_activity must be true or false")
+
     secrets = data.get("secrets", {})
     _reject_unknown("secrets", secrets, SECRETS_KEYS)
     if "files" in secrets:
@@ -333,23 +356,27 @@ def validate(data: Any) -> dict[str, Any]:
         raise ManifestError(
             f"network.mode must be one of {NETWORK_MODES}, got {mode!r}"
         )
+    if network_activity and not (mode == "routed" and isolation == "microvm"):
+        raise ManifestError(
+            "observability.network_activity requires network.mode: routed and "
+            "runtime.isolation: microvm; TAP observation is only available there"
+        )
 
     # Each key belongs to exactly one mode. Accepting a key the mode ignores
     # would be a setting that silently does nothing.
-    # Check the combination FIRST: it has a specific explanation, and the
-    # generic "wrong mode" message would otherwise hide the real reason.
-    if mode == "routed" and "allow_domains" in network:
+    proxy_only = tuple(
+        key for key in ("allow_domains", "verify_domain") if key in network
+    )
+    if proxy_only and mode != "proxy":
+        names = ", ".join(f"network.{key}" for key in proxy_only)
+        verb = "is" if len(proxy_only) == 1 else "are"
         raise ManifestError(
-            "a runtime cannot use proxy and routed together in this version; "
-            "the combination is untested. Use a prebuilt image, or prepare "
-            "dependencies in a separate proxy-mode runtime"
+            f"{names} {verb} only valid with mode: proxy; "
+            f"remove {'this field' if len(proxy_only) == 1 else 'these fields'} "
+            f"when using mode: {mode}"
         )
-    if "allow_domains" in network and mode != "proxy":
-        raise ManifestError("network.allow_domains is only valid with mode: proxy")
     if ("allow" in network or "verify" in network) and mode != "routed":
         raise ManifestError("network.allow/verify are only valid with mode: routed")
-    if "verify_domain" in network and mode != "proxy":
-        raise ManifestError("network.verify_domain is only valid with mode: proxy")
 
     allow_domains = network.get("allow_domains", [])
     if not isinstance(allow_domains, list):
@@ -403,15 +430,18 @@ def validate(data: Any) -> dict[str, Any]:
                 )
 
             proto = rule.get("protocol")
-            if proto not in ROUTED_PROTOCOLS:
+            if proto is None:
+                if "ports" in rule:
+                    raise ManifestError(
+                        "network.allow[]: 'ports' requires 'protocol'; omit both "
+                        "to allow all IP traffic to the destination"
+                    )
+            elif proto not in ROUTED_PROTOCOLS:
                 raise ManifestError(
                     f"network.allow[].protocol must be one of {ROUTED_PROTOCOLS}, "
                     f"got {proto!r} (one protocol per rule)"
                 )
-
-            # `ports` with icmp_echo cannot be enforced, so it is an error
-            # rather than something silently dropped.
-            if proto == "icmp_echo":
+            elif proto == "icmp_echo":
                 if "ports" in rule:
                     raise ManifestError(
                         "network.allow[]: 'ports' is not valid with protocol "
@@ -441,11 +471,6 @@ def validate(data: Any) -> dict[str, Any]:
                         )
 
         verify = network.get("verify")
-        if verify is None:
-            raise ManifestError(
-                "mode: routed requires network.verify with one allowed TCP port "
-                "and one known-open blocked_port"
-            )
         if verify is not None:
             if not isinstance(verify, dict):
                 raise ManifestError("network.verify must be a mapping")
@@ -459,15 +484,20 @@ def validate(data: Any) -> dict[str, Any]:
                 raise ManifestError("network.verify.protocol must be tcp in routed v1")
             port = verify.get("port")
             blocked_port = verify.get("blocked_port")
+            blocked_address = verify.get("blocked_address", verify.get("address"))
+            if not _valid_address(blocked_address):
+                raise ManifestError(
+                    "network.verify.blocked_address must be one literal IPv4 address"
+                )
             if not _valid_port(port):
                 raise ManifestError("network.verify.port must be a port number 1-65535")
             if not _valid_port(blocked_port):
                 raise ManifestError(
                     "network.verify.blocked_port must be a port number 1-65535"
                 )
-            if blocked_port == port:
+            if blocked_address == verify.get("address") and blocked_port == port:
                 raise ManifestError(
-                    "network.verify.blocked_port must differ from network.verify.port"
+                    "network.verify blocked endpoint must differ from the allowed endpoint"
                 )
 
             # The positive control must be permitted by the policy it tests.
@@ -477,9 +507,13 @@ def validate(data: Any) -> dict[str, Any]:
             vproto = verify["protocol"]
             covered = False
             for rule in rules:
-                if rule["protocol"] != vproto:
-                    continue
                 if addr not in IPv4Network(rule["cidr"], strict=True):
+                    continue
+                rproto = rule.get("protocol")
+                if rproto is None:
+                    covered = True
+                    break
+                if rproto != vproto:
                     continue
                 rports = rule.get("ports")
                 if rports == "any" or (isinstance(rports, list) and port in rports):
@@ -493,11 +527,16 @@ def validate(data: Any) -> dict[str, Any]:
                     "a destination the policy allows."
                 )
 
+            denied_addr = IPv4Address(blocked_address)
             blocked_covered = False
             for rule in rules:
-                if rule["protocol"] != "tcp":
+                if denied_addr not in IPv4Network(rule["cidr"], strict=True):
                     continue
-                if addr not in IPv4Network(rule["cidr"], strict=True):
+                rproto = rule.get("protocol")
+                if rproto is None:
+                    blocked_covered = True
+                    break
+                if rproto != "tcp":
                     continue
                 rports = rule.get("ports")
                 if rports == "any" or (
@@ -507,9 +546,9 @@ def validate(data: Any) -> dict[str, Any]:
                     break
             if blocked_covered:
                 raise ManifestError(
-                    f"network.verify.blocked_port {blocked_port} is permitted by "
-                    "network.allow; it must name a known-open TCP port that policy "
-                    "intentionally blocks"
+                    f"network.verify blocked endpoint {blocked_address}:{blocked_port} "
+                    "is permitted by network.allow; it must name a known-open TCP "
+                    "endpoint that policy intentionally blocks"
                 )
 
     caps = data.get("capabilities", [])
@@ -552,6 +591,7 @@ def _to_model(data: Mapping[str, Any]) -> RuntimeManifest:
     build_data = runtime_data.get("build", {}).get("args", {})
     runtime = RuntimeSettings(
         mode=runtime_data.get("mode", "interactive"),
+        isolation=runtime_data.get("isolation", "container"),
         command=tuple(runtime_data.get("command", ())),
         build_arguments=tuple(
             BuildArgument(name, value) for name, value in build_data.items()
@@ -579,7 +619,7 @@ def _to_model(data: Mapping[str, Any]) -> RuntimeManifest:
     routed_rules = tuple(
         RoutedRule(
             destination=IPv4Network(rule["cidr"], strict=True),
-            protocol=rule["protocol"],
+            protocol=rule.get("protocol"),
             ports=(
                 tuple(rule["ports"])
                 if isinstance(rule.get("ports"), list)
@@ -596,6 +636,11 @@ def _to_model(data: Mapping[str, Any]) -> RuntimeManifest:
             protocol=verify_data["protocol"],
             allowed_port=verify_data["port"],
             blocked_port=verify_data["blocked_port"],
+            blocked_address=(
+                IPv4Address(verify_data["blocked_address"])
+                if "blocked_address" in verify_data
+                else None
+            ),
         )
     network = NetworkPolicy(
         mode=network_data.get("mode", "proxy"),
@@ -603,6 +648,11 @@ def _to_model(data: Mapping[str, Any]) -> RuntimeManifest:
         verify_domain=network_data.get("verify_domain"),
         routed_rules=routed_rules,
         routed_verification=routed_verification,
+    )
+    observability_data = data.get("observability", {})
+    observability = ObservabilitySettings(
+        llm_prompts=observability_data.get("llm_prompts", False),
+        network_activity=observability_data.get("network_activity", False),
     )
 
     return RuntimeManifest(
@@ -614,6 +664,7 @@ def _to_model(data: Mapping[str, Any]) -> RuntimeManifest:
         llm=llm,
         secret_files=tuple(data.get("secrets", {}).get("files", ())),
         network=network,
+        observability=observability,
         environment=tuple(
             EnvironmentVariable(name, value)
             for name, value in data.get("env", {}).items()

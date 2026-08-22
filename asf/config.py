@@ -244,12 +244,6 @@ class AsfConfig:
                 f"--ulimit=nofile={nofile}:"
                 f"{self.text('ULIMIT_NOFILE_HARD', nofile)}"
             )
-        nproc = self.text("ULIMIT_NPROC_SOFT")
-        if nproc:
-            args.append(
-                f"--ulimit=nproc={nproc}:"
-                f"{self.text('ULIMIT_NPROC_HARD', nproc)}"
-            )
         core = self.text("ULIMIT_CORE")
         if core:
             args.append(f"--ulimit=core={core}:{core}")

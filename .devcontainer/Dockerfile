@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     less \
     git \
     procps \
+    util-linux \
     tar \
     zsh \
     man-db \
@@ -27,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg2 \
     gh \
     iproute2 \
+    iputils-ping \
     jq \
     netcat-openbsd \
     ripgrep \
@@ -111,6 +113,8 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 ENV SHELL=/bin/zsh
 ENV EDITOR=nano
 ENV VISUAL=nano
+# Keep the completion cache stable across Podman/libkrun hostnames.
+ENV ZSH_COMPDUMP=/home/node/.zcompdump
 
 ARG ZSH_IN_DOCKER_VERSION=1.2.0
 RUN set -eu; \
@@ -123,6 +127,16 @@ RUN set -eu; \
         -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
         -x; \
     rm /tmp/zsh-in-docker.sh
+
+# Pre-generate the completion dump without starting an interactive shell.
+# This avoids ZLE warnings during image builds while keeping the first real
+# terminal prompt fast.
+RUN zsh -f -c ' \
+    fpath=("$HOME/.oh-my-zsh/functions" "$HOME/.oh-my-zsh/completions" \
+      "$HOME/.oh-my-zsh/plugins/git" "$HOME/.oh-my-zsh/plugins/fzf" $fpath); \
+    autoload -Uz compinit; \
+    compinit -d "$ZSH_COMPDUMP" \
+'
 
 COPY --chown=node:node \
     agents/hermes/patches/gpt-5.6-reasoning-none.patch \

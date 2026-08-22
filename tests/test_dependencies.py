@@ -50,7 +50,9 @@ class DependencyPinTests(unittest.TestCase):
         # Replaces the old exact-set assertion: drift is now caught by checking
         # that each build ARG the Dockerfile expects is actually pinned.
         config = parse_shell_assignments(ROOT / "asf.conf")
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
+        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
         args = set(re.findall(r"^ARG\s+([A-Z_][A-Z0-9_]*)", dockerfile, re.MULTILINE))
         # Supplied by the devcontainer CLI or the generator, not by asf.conf.
         supplied_elsewhere = {"TZ", "AGENT", "USERNAME", "_DEV_CONTAINERS_BASE_IMAGE"}
@@ -62,6 +64,38 @@ class DependencyPinTests(unittest.TestCase):
         image = broker["LITELLM_IMAGE"]
         self.assertRegex(image, r":v\d+\.\d+\.\d+$")
         self.assertNotIn("main-stable", image)
+
+    def test_shared_agent_image_keeps_routed_tools_minimal(self) -> None:
+        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("iputils-ping", dockerfile)
+        self.assertNotRegex(dockerfile, re.compile(r"^\s*nmap\s*\\$", re.MULTILINE))
+
+    def test_routed_scanner_example_documents_krun_negative_control(self) -> None:
+        manifest = (ROOT / "agents" / "routed-scanner" / "runtime.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("isolation: microvm", manifest)
+        self.assertIn("blocked_address:", manifest)
+
+    def test_crun_tap_change_is_one_auditable_patch(self) -> None:
+        script = (
+            ROOT / "tools" / "experiments" / "build-krun-tap-runtime.sh"
+        ).read_text(encoding="utf-8")
+        patch = (
+            ROOT
+            / "tools"
+            / "experiments"
+            / "patches"
+            / "crun-1.29.1-tap.patch"
+        ).read_text(encoding="utf-8")
+        self.assertIn('python3 - "$SRC/src/libcrun/handlers/krun.c"', script)
+        self.assertIn("source.count(declaration) != 1", script)
+        self.assertIn("configure_vm.count(passt) != 1", script)
+        self.assertIn("krun_add_net_tap", patch)
+        self.assertIn('find_annotation (container, "krun.tap_name")', patch)
+
 
     def test_dockerfile_does_not_pipe_remote_scripts_to_shell(self) -> None:
         dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")

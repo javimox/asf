@@ -12,6 +12,63 @@
 
 set -euo pipefail
 
+# krun currently enters the guest as root even when Podman is given
+# --user=1000:1000 and --cap-drop=ALL. Enforce the long-lived ASF workload
+# identity inside the guest before running any setup or agent-controlled code.
+if [[ "${ASF_ISOLATION:-container}" == "microvm" && "$(id -u)" -eq 0 ]]; then
+    command -v setpriv >/dev/null 2>&1 || {
+        echo "  ✗ setpriv is required for krun guest hardening — aborting startup" >&2
+        exit 1
+    }
+
+    if [[ -n "${ASF_KRUN_TAP_ADDRESS:-}" ]]; then
+        [[ -n "${ASF_KRUN_TAP_GATEWAY:-}" ]] || {
+            echo "  ✗ routed microVM TAP gateway is missing — aborting startup" >&2
+            exit 1
+        }
+        ip link set eth0 up
+        ip addr replace "$ASF_KRUN_TAP_ADDRESS" dev eth0
+        for route in ${ASF_KRUN_TAP_ROUTES:-}; do
+            ip route replace "$route" via "$ASF_KRUN_TAP_GATEWAY" dev eth0
+        done
+        if ip -4 route show default | grep -q .; then
+            echo "  ✗ routed microVM has an unexpected IPv4 default route — aborting startup" >&2
+            exit 1
+        fi
+        if ip -6 route show default | grep -q .; then
+            echo "  ✗ routed microVM has an unexpected IPv6 default route — aborting startup" >&2
+            exit 1
+        fi
+    fi
+
+    case "${ASF_KRUN_CAPABILITIES:-}" in
+        "")
+            krun_inh_caps=-all
+            krun_ambient_caps=-all
+            krun_bounding_caps=-all
+            ;;
+        net_raw)
+            krun_inh_caps=-all,+net_raw
+            krun_ambient_caps=-all,+net_raw
+            krun_bounding_caps=-all,+net_raw
+            ;;
+        *)
+            echo "  ✗ unsupported krun guest capability set — aborting startup" >&2
+            exit 1
+            ;;
+    esac
+
+    exec setpriv \
+        --reuid=node \
+        --regid=node \
+        --init-groups \
+        --inh-caps="$krun_inh_caps" \
+        --ambient-caps="$krun_ambient_caps" \
+        --bounding-set="$krun_bounding_caps" \
+        --no-new-privs \
+        env HOME=/home/node USER=node LOGNAME=node "$0" "$@"
+fi
+
 # ── 1. Host secret-file isolation (fail closed) ──────────────────────────────
 # sandbox.sh overlays /workspace/sandbox/secrets with an empty read-only tmpfs
 # (`notmpcopyup`). Verify it is (a) a tmpfs and (b) empty — catches a removed
@@ -19,7 +76,12 @@ set -euo pipefail
 SECRET_SOURCE_DIR="/workspace/sandbox/secrets"
 SECRET_FS_TYPE=$(stat -f -c '%T' "$SECRET_SOURCE_DIR" 2>/dev/null || true)
 
-if [[ "$SECRET_FS_TYPE" != "tmpfs" ]]; then
+# With krun, Podman constructs the tmpfs mask on the host side and libkrun
+# exposes the resulting tree through virtio-fs. The guest can therefore report
+# "virtiofs" even though the host secret directory is still masked. The krun
+# launcher owns the mandatory tmpfs run argument; here we still fail closed if
+# any host secret became visible.
+if [[ "${ASF_ISOLATION:-container}" != "microvm" && "$SECRET_FS_TYPE" != "tmpfs" ]]; then
     echo "  ✗ Host secret directory is not masked by tmpfs — aborting startup" >&2
     echo "    Expected tmpfs at: $SECRET_SOURCE_DIR" >&2
     exit 1
@@ -122,4 +184,11 @@ if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
     echo "  Git: commit in here — repos are bind mounts, so commits land on the"
     echo "       host. Review and push from the host:  git log -p && git push"
     echo ""
+fi
+
+# krun runs this script as the initial workload setup rather than as a Dev
+# Container postStartCommand. In that mode, hand control directly to the
+# requested agent/service process after all fail-closed checks have passed.
+if (( $# > 0 )); then
+    exec "$@"
 fi

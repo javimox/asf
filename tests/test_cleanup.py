@@ -17,7 +17,7 @@ from asf.cleanup import (
 )
 from asf.errors import InfrastructureError, ValidationError
 from asf.identity import ResourceIdentity
-from asf.ownership import Resource, ResourceKind, ResourceLedger
+from asf.ownership import Resource, ResourceKind, ResourceLedger, teardown_sequence
 from asf.podman import (
     ContainerInspection,
     ObjectKind,
@@ -312,6 +312,26 @@ class CleanupExecutorTests(unittest.TestCase):
         )
         self.assertEqual(failed.results[0].outcome, CleanupOutcome.FAILED)
         self.assertTrue(live.exists())
+
+    def test_routed_krun_teardown_orders_vmm_before_gateway_before_network(self) -> None:
+        resources = (
+            self._resource(ResourceKind.NETWORK, "scan-network"),
+            self._resource(ResourceKind.GATEWAY_CONTAINER, "gateway"),
+            self._resource(ResourceKind.GATEWAY_INIT_CONTAINER, "gateway-init"),
+            self._resource(ResourceKind.RUNTIME_CONTAINER, "microvm"),
+        )
+
+        ordered = teardown_sequence(resources)
+
+        self.assertEqual(
+            [resource.kind for resource in ordered],
+            [
+                ResourceKind.RUNTIME_CONTAINER,
+                ResourceKind.GATEWAY_INIT_CONTAINER,
+                ResourceKind.GATEWAY_CONTAINER,
+                ResourceKind.NETWORK,
+            ],
+        )
 
     def test_routed_container_uses_stop_then_remove(self) -> None:
         resource = self._resource(ResourceKind.GATEWAY_CONTAINER, "gateway")

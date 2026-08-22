@@ -131,6 +131,7 @@ class LayoutTests(unittest.TestCase):
             ),
             "broker_probe_tool": root / "tools" / "broker_probe.py",
             "litellm_entrypoint": root / "tools" / "litellm_entrypoint.py",
+            "litellm_observer": root / "tools" / "litellm_observer.py",
         }
         for name, value in expected.items():
             with self.subTest(name=name):

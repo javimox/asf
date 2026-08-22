@@ -110,6 +110,21 @@ class TerminalRestorationTests(unittest.TestCase):
 
 
 class SessionProcessSupervisorTests(unittest.TestCase):
+    def test_environment_overlay_is_passed_only_when_requested(self) -> None:
+        calls = []
+
+        def spawn(*args, **kwargs):  # noqa: ANN001
+            calls.append((args, kwargs))
+            return FakeProcess(0)
+
+        supervisor = SessionProcessSupervisor(popen_factory=spawn)
+        supervisor.run(("child",), env={"ASF_TEST_SECRET": "value"})
+
+        self.assertEqual(calls[0][0], (["child"],))
+        self.assertFalse(calls[0][1]["shell"])
+        self.assertEqual(calls[0][1]["env"]["ASF_TEST_SECRET"], "value")
+        self.assertNotIn("ASF_TEST_SECRET", os.environ)
+
     def test_normal_and_signal_exit_statuses_are_explicit(self) -> None:
         normal = SessionProcessSupervisor(
             popen_factory=lambda *_args, **_kwargs: FakeProcess(42)
@@ -340,6 +355,10 @@ class FakeCleanup:
         self.error = error
         self.order = order
         self.calls = 0
+        self.release_calls = 0
+
+    def release_lock(self, *_args, **_kwargs):  # noqa: ANN002, ANN003
+        self.release_calls += 1
 
     def cleanup(self, *_args, **_kwargs):  # noqa: ANN002, ANN003
         self.calls += 1
@@ -383,6 +402,25 @@ class RunOpenSessionTests(unittest.TestCase):
             )
         self.assertEqual(status, 0)
         self.assertEqual(order, ["terminal", "cleanup"])
+
+    def test_detach_preserves_live_runtime_and_releases_only_the_lock(self) -> None:
+        cleanup = FakeCleanup()
+        output = io.StringIO()
+        status = run_open_session(
+            ("child",),
+            cleanup=cleanup,  # type: ignore[arg-type]
+            runtime="hermes",
+            owner_pid=os.getpid(),
+            supervisor=FakeSupervisor(),  # type: ignore[arg-type]
+            stdout=output,
+            stderr=io.StringIO(),
+            preserve_if_running=lambda: True,
+        )
+        self.assertEqual(status, 0)
+        self.assertEqual(cleanup.calls, 0)
+        self.assertEqual(cleanup.release_calls, 1)
+        self.assertIn("Detached from hermes", output.getvalue())
+        self.assertIn("./sandbox.sh shell hermes", output.getvalue())
 
     def test_normal_exit_returns_cleanup_status(self) -> None:
         cleanup = FakeCleanup(returncode=1)

@@ -144,6 +144,7 @@ class ContainerInspection:
     user: str = ""
     read_only_rootfs: bool = False
     published_ports: bool = False
+    pid: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "labels", MappingProxyType(dict(self.labels)))
@@ -154,6 +155,10 @@ class ContainerInspection:
             raise TypeError("read_only_rootfs must be Boolean")
         if not isinstance(self.published_ports, bool):
             raise TypeError("published_ports must be Boolean")
+        if self.pid is not None and (
+            isinstance(self.pid, bool) or not isinstance(self.pid, int) or self.pid < 0
+        ):
+            raise TypeError("container pid must be a non-negative integer or None")
 
     @property
     def state(self) -> ContainerState:
@@ -697,6 +702,13 @@ def _parse_inspection(item: Any, *, index: int) -> ContainerInspection:
     labels = _parse_labels(config.get("Labels"), context)
     networks = _parse_networks(mapping.get("NetworkSettings"), context)
     exit_code = _parse_exit_code(state.get("ExitCode"), context)
+    pid_value = state.get("Pid")
+    if pid_value is None:
+        pid = None
+    elif isinstance(pid_value, bool) or not isinstance(pid_value, int) or pid_value < 0:
+        raise PodmanOutputError(f"{context}.State.Pid must be a non-negative integer")
+    else:
+        pid = pid_value
     user_value = config.get("User", "")
     if not isinstance(user_value, str):
         raise PodmanOutputError(f"{context}.Config.User must be text")
@@ -728,6 +740,7 @@ def _parse_inspection(item: Any, *, index: int) -> ContainerInspection:
         user=user_value,
         read_only_rootfs=read_only_value,
         published_ports=published_ports,
+        pid=pid,
     )
 
 

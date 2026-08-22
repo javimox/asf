@@ -30,11 +30,14 @@ from asf.broker import (
 )
 from asf.errors import ConfigurationError, InfrastructureError, ValidationError
 from asf.manifest import load_model
+from asf.observation_sessions import begin_observation_session
 from asf.paths import RepoPaths
 from asf.podman import PodmanClient
 from asf.process import CommandResult, SensitiveArgument
 from asf.runtime_plan import (
     BROKER_INTERNAL_ALIAS,
+    NetworkRole,
+    RoutedSubnetAllocation,
     build_runtime_plan,
     runtime_plan_path,
     write_runtime_plan,
@@ -129,11 +132,17 @@ class BrokerTestBase(unittest.TestCase):
         (self.root / "tools" / "litellm_entrypoint.py").write_text(
             "print('entrypoint')\n", encoding="utf-8"
         )
+        (self.root / "tools" / "litellm_observer.py").write_text(
+            "proxy_handler_instance = object()\n", encoding="utf-8"
+        )
         self.paths = RepoPaths.for_root(self.root)
         self.manifest = load_model(self.paths.identity.runtime_manifest("claude"))
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
+
+    def begin_observation(self) -> None:
+        begin_observation_session(self.paths, "claude")
 
     def request(
         self,
@@ -458,9 +467,25 @@ class BrokerLifecycleTests(BrokerTestBase):
         self.assertNotIn("--publish", actual)
         self.assertFalse(any(item.startswith("--cap-add") for item in actual))
         self.assertIn("--cap-drop=ALL", actual)
+        secrets_tmpfs = "/run/secrets:rw,nosuid,nodev,noexec,size=1m,mode=0755"
+        self.assertIn(secrets_tmpfs, actual)
+        self.assertEqual(actual[actual.index(secrets_tmpfs) - 1], "--tmpfs")
         self.assertIn(
             f"{request.secret_name},type=mount,target=provider_api_key",
             actual,
+        )
+        self.assertNotIn("PYTHONPATH=/asf", actual)
+        self.assertIn(
+            f"{request.observer}:/tmp/litellm_observer.py:ro",
+            actual,
+        )
+        self.assertIn(
+            f"{request.request_log_path}:/tmp/asf-broker-requests.jsonl:rw",
+            actual,
+        )
+        self.assertIn("ASF_LLM_PROMPTS=false", actual)
+        self.assertFalse(
+            any("/tmp/asf-llm-prompts.jsonl:rw" in item for item in actual)
         )
 
         readiness = service.readiness_command()
@@ -468,7 +493,63 @@ class BrokerLifecycleTests(BrokerTestBase):
         self.assertIn(f"127.0.0.1:{BROKER_PORT}", readiness[-1])
         self.assertIn("health/liveliness", readiness[-1])
 
+    def test_prompt_capture_mount_is_opt_in(self) -> None:
+        self.manifest = replace(
+            self.manifest,
+            observability=replace(self.manifest.observability, llm_prompts=True),
+        )
+        request = self.request()
+        actual = tuple(
+            item.reveal() if isinstance(item, SensitiveArgument) else str(item)
+            for item in self.service(RecordingRunner()).run_argv(
+                request, SecretValue(TOKEN)
+            )
+        )
+        self.assertIn("ASF_LLM_PROMPTS=true", actual)
+        self.assertIn("ASF_LLM_PROMPT_LOG=/tmp/asf-llm-prompts.jsonl", actual)
+        self.assertIn(
+            f"{request.prompt_log_path}:/tmp/asf-llm-prompts.jsonl:rw",
+            actual,
+        )
+
+    def test_routed_krun_broker_joins_scan_at_planned_fixed_ip(self) -> None:
+        paths = RepoPaths.for_root(ROOT)
+        hermes = load_model(ROOT / "agents" / "hermes" / "runtime.yml")
+        routed = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
+        manifest = replace(
+            hermes,
+            runtime=replace(hermes.runtime, isolation="microvm"),
+            network=routed.network,
+            capabilities=frozenset({"net_raw"}),
+        )
+        plan = build_runtime_plan(
+            manifest,
+            paths=paths,
+            owner_pid=4242,
+            broker_globally_enabled=True,
+            routed_subnets=RoutedSubnetAllocation.parse(
+                ("10.76.40.0/24", "10.77.40.0/24", "10.79.40.0/24")
+            ),
+        )
+        request = BrokerRequest(paths, manifest, plan, BrokerSettings(IMAGE))
+        actual = tuple(
+            item.reveal() if isinstance(item, SensitiveArgument) else str(item)
+            for item in self.service(RecordingRunner()).run_argv(
+                request, SecretValue(TOKEN)
+            )
+        )
+        networks = [
+            actual[index + 1]
+            for index, item in enumerate(actual)
+            if item == "--network"
+        ]
+        self.assertEqual(
+            networks[-1],
+            f"{plan.network(NetworkRole.SCAN).name}:ip=10.77.40.3",
+        )
+
     def test_start_uses_planned_names_networks_labels_and_hardening(self) -> None:
+        self.begin_observation()
         self.write_secret("claude.env", "ANTHROPIC_API_KEY=provider-key\n")
         request = self.request()
         runner = RecordingRunner(image_exists=0)
@@ -506,6 +587,8 @@ class BrokerLifecycleTests(BrokerTestBase):
             f"{request.container.name}\napi.anthropic.com\n",
         )
         self.assertEqual(request.state_path.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(request.request_log_path.is_file())
+        self.assertEqual(request.request_log_path.stat().st_mode & 0o777, 0o600)
         self.assertIn("Broker container started", output.getvalue())
 
     def test_missing_key_fails_before_any_podman_mutation(self) -> None:
@@ -521,6 +604,7 @@ class BrokerLifecycleTests(BrokerTestBase):
         self.assertEqual(runner.calls, [])
 
     def test_image_pull_and_command_failures_are_explicit(self) -> None:
+        self.begin_observation()
         self.write_secret("claude.env", "ANTHROPIC_API_KEY=value\n")
         request = self.request()
         pull = RecordingRunner(image_exists=1)

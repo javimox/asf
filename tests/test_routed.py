@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -54,6 +55,15 @@ class RoutedFixture(unittest.TestCase):
             self.request(allow_persistent=allow_persistent),
             "gateway-image",
         )
+
+    def krun_request(self, root: Path | None = None) -> RoutedRequest:
+        request = self.request(root)
+        manifest = replace(
+            request.manifest,
+            runtime=replace(request.manifest.runtime, isolation="microvm"),
+        )
+        plan = replace(request.plan, runtime_isolation="microvm")
+        return RoutedRequest(manifest, plan)
 
 
 class CapabilityBoundaryTests(RoutedFixture):
@@ -153,6 +163,15 @@ class CapabilityBoundaryTests(RoutedFixture):
             gateway_name=commands.request.gateway.name,
             persistent=True,
         )
+
+    def test_krun_tap_device_is_only_given_to_short_lived_initializer(self) -> None:
+        commands = RoutedGateway(self.krun_request(), "gateway-image")
+        holder = commands.gateway_argv()
+        initializer = commands.initializer_argv()
+        self.assertNotIn("/dev/net/tun", holder)
+        self.assertIn("/dev/net/tun", initializer)
+        self.assertIn("ASF_TAP_NAME=tap0", initializer)
+        self.assertIn("ASF_TAP_GATEWAY=10.90.0.1", initializer)
 
 
 class HardeningVerificationTests(unittest.TestCase):
@@ -302,6 +321,15 @@ class ScriptedRunner:
                 "3: eth1    inet 10.92.0.2/24 scope global eth1\n",
                 "",
             )
+        if command[-7:] == (
+            "ip", "-o", "-4", "addr", "show", "dev", "tap0"
+        ):
+            return CommandResult(
+                command,
+                0,
+                "4: tap0    inet 10.90.0.1/30 scope global tap0\n",
+                "",
+            )
         return CommandResult(command, 0, "", "")
 
 
@@ -335,6 +363,20 @@ class LifecycleTests(RoutedFixture):
             self.assertTrue(
                 any(call[1:3] == ("container", "exists") for call in runner.calls)
             )
+
+    def test_krun_start_creates_tap_and_writes_guest_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.checkout(Path(temporary) / "checkout")
+            runner = ScriptedRunner(status_lines=(f"{ZERO} {ZERO} 1\n",) * 2)
+            request = self.krun_request(root)
+            RoutedService(PodmanClient(runner=runner)).start(
+                request, output=io.StringIO()
+            )
+            policy = request.policy_path.read_text(encoding="utf-8")
+            self.assertIn('iifname "tap0"', policy)
+            self.assertIn("ip saddr 10.90.0.2", policy)
+            self.assertIn("ip daddr 10.90.0.2 ct state established,related", policy)
+            self.assertTrue(any("/dev/net/tun" in call for call in runner.calls))
 
     def test_initializer_that_remains_is_a_startup_failure(self) -> None:
         runner = ScriptedRunner(

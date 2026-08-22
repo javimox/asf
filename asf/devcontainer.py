@@ -28,6 +28,7 @@ from .runtime_plan import (
     GeneratedFileKind,
     PROXY_INTERNAL_ALIAS,
     RuntimePlan,
+    routed_broker_address,
     load_runtime_plan,
     runtime_plan_path,
     validate_runtime_plan_context,
@@ -38,6 +39,7 @@ __all__ = [
     "DevcontainerError",
     "BuildDevcontainerRequest",
     "DevcontainerRequest",
+    "apply_egress_environment",
     "build_build_config",
     "build_devcontainer_config",
     "build_mounts",
@@ -345,6 +347,7 @@ def _apply_manifest_and_build_inputs(
     if ssh_agent_socket is not None:
         environment["SSH_AUTH_SOCK"] = "/ssh-agent"
     environment["ASF_AGENT"] = runtime
+    environment["ASF_ISOLATION"] = "container"
 
     build = cfg.setdefault("build", {})
     if not isinstance(build, dict):
@@ -396,6 +399,75 @@ def build_build_config(request: BuildDevcontainerRequest) -> dict[str, Any]:
     return cfg
 
 
+def apply_egress_environment(
+    environment: dict[str, str],
+    *,
+    plan: "RuntimePlan",
+    manifest: RuntimeManifest,
+    proxy_port: int,
+    broker_default_model: str,
+    broker_token: str,
+) -> None:
+    """Apply the proxy/broker session environment to ``environment``.
+
+    Single source of truth for the security-relevant egress wiring, shared by
+    the devcontainer path (which passes the ``${localEnv:…}`` placeholder so
+    the token never persists in generated configuration) and the krun path
+    (which passes the real session token and keeps values out of argv).
+    """
+
+    proxy = plan.container(SessionRole.PROXY)
+    if proxy is not None:
+        proxy_url = f"http://{PROXY_INTERNAL_ALIAS}:{proxy_port}"
+        for variable in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            environment[variable] = proxy_url
+        environment["NO_PROXY"] = "localhost,127.0.0.1"
+        environment["no_proxy"] = "localhost,127.0.0.1"
+        environment["ASF_PROXY"] = proxy_url
+
+    broker = plan.container(SessionRole.BROKER)
+    if broker is not None:
+        llm = manifest.llm
+        if llm is None or llm.protocol is None:
+            raise DevcontainerError(
+                "broker-enabled runtime plan requires an LLM wire protocol"
+            )
+        if not broker_token:
+            raise DevcontainerError(
+                "broker-enabled runtime requires a session token"
+            )
+        environment["ASF_BROKER_ENABLED"] = "true"
+        broker_address = (
+            routed_broker_address(plan)
+            if (
+                manifest.runtime.isolation == "microvm"
+                and manifest.network.mode == "routed"
+            )
+            else None
+        )
+        broker_host = (
+            str(broker_address)
+            if broker_address is not None
+            else BROKER_INTERNAL_ALIAS
+        )
+        if proxy is not None:
+            no_proxy = environment.get("NO_PROXY", "localhost,127.0.0.1")
+            no_proxy = f"{no_proxy},{broker_host}"
+            environment["NO_PROXY"] = no_proxy
+            environment["no_proxy"] = no_proxy
+        if llm.protocol == "anthropic":
+            environment["ANTHROPIC_BASE_URL"] = f"http://{broker_host}:4000"
+            environment["ANTHROPIC_AUTH_TOKEN"] = broker_token
+            environment["ANTHROPIC_API_KEY"] = ""
+        else:
+            base_url = f"http://{broker_host}:4000/v1"
+            environment["OPENAI_BASE_URL"] = base_url
+            environment["OPENAI_API_BASE"] = base_url
+            environment["OPENAI_API_KEY"] = broker_token
+            if broker_default_model:
+                environment["ASF_DEFAULT_MODEL"] = broker_default_model
+
+
 def build_devcontainer_config(request: DevcontainerRequest) -> dict[str, Any]:
     """Return the deterministic configuration for one validated request."""
 
@@ -423,41 +495,14 @@ def build_devcontainer_config(request: DevcontainerRequest) -> dict[str, Any]:
     _validate_capability_arguments(request.plan, request.run_arguments)
     run_args.extend(request.run_arguments)
 
-    proxy = request.plan.container(SessionRole.PROXY)
-    if proxy is not None:
-        proxy_url = f"http://{PROXY_INTERNAL_ALIAS}:{request.proxy_port}"
-        for variable in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
-            environment[variable] = proxy_url
-        environment["NO_PROXY"] = "localhost,127.0.0.1"
-        environment["no_proxy"] = "localhost,127.0.0.1"
-        environment["ASF_PROXY"] = proxy_url
-
-    broker = request.plan.container(SessionRole.BROKER)
-    if broker is not None:
-        llm = request.manifest.llm
-        if llm is None or llm.protocol is None:
-            raise DevcontainerError(
-                "broker-enabled runtime plan requires an LLM wire protocol"
-            )
-        environment["ASF_BROKER_ENABLED"] = "true"
-        if proxy is not None:
-            no_proxy = environment.get("NO_PROXY", "localhost,127.0.0.1")
-            no_proxy = f"{no_proxy},{BROKER_INTERNAL_ALIAS}"
-            environment["NO_PROXY"] = no_proxy
-            environment["no_proxy"] = no_proxy
-        if llm.protocol == "anthropic":
-            environment["ANTHROPIC_BASE_URL"] = (
-                f"http://{BROKER_INTERNAL_ALIAS}:4000"
-            )
-            environment["ANTHROPIC_AUTH_TOKEN"] = "${localEnv:ASF_BROKER_TOKEN}"
-            environment["ANTHROPIC_API_KEY"] = ""
-        else:
-            base_url = f"http://{BROKER_INTERNAL_ALIAS}:4000/v1"
-            environment["OPENAI_BASE_URL"] = base_url
-            environment["OPENAI_API_BASE"] = base_url
-            environment["OPENAI_API_KEY"] = "${localEnv:ASF_BROKER_TOKEN}"
-            if request.broker_default_model:
-                environment["ASF_DEFAULT_MODEL"] = request.broker_default_model
+    apply_egress_environment(
+        environment,
+        plan=request.plan,
+        manifest=request.manifest,
+        proxy_port=request.proxy_port,
+        broker_default_model=request.broker_default_model,
+        broker_token="${localEnv:ASF_BROKER_TOKEN}",
+    )
 
     cfg["mounts"] = build_mounts(
         request.plan,

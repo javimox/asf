@@ -84,6 +84,53 @@ remove_container() {
     done
 }
 
+
+probe_result() {
+    local text="$1"
+    case "$text" in
+        *"route show default"*"asf-route-probe"*) return 22 ;;
+        *"asf-probe-response"*"GET http://"*:9000/*)
+            if [[ "${MOCK_PORT_ENFORCED:-true}" == true ]]; then
+                printf 'HTTP/1.1 403 Forbidden\n'
+                return 40
+            fi
+            printf 'HTTP/1.1 200 OK\n'
+            return 20
+            ;;
+        *"asf-probe-response"*"CONNECT statsig.com:443"*|*"asf-probe-response"*"CONNECT github.com:443"*|*"asf-probe-response"*"CONNECT pypi.org:443"*)
+            if [[ "${MOCK_CONNECT_OK:-true}" == true ]]; then
+                printf 'HTTP/1.1 200 Connection Established\n'
+                return 20
+            fi
+            return 61
+            ;;
+        *"asf-probe-response"*"CONNECT "*)
+            printf 'HTTP/1.1 403 Forbidden\n'
+            return 40
+            ;;
+        *"ip -4 route show default"*|*"ip -6 route show default"*) return 0 ;;
+        *"ip -4 route get 1.1.1.1"*) echo "RTNETLINK answers: Network is unreachable" >&2; return 1 ;;
+        *nslookup*) return 1 ;;
+        *"GET http://"*:9000/*)
+            if [[ "${MOCK_PORT_ENFORCED:-true}" == true ]]; then
+                printf 'HTTP/1.1 403 Forbidden\r\n\r\n'
+            else
+                printf 'HTTP/1.1 200 OK\r\n\r\n'
+            fi
+            return 0
+            ;;
+        *"CONNECT statsig.com:443"*|*"CONNECT github.com:443"*|*"CONNECT pypi.org:443"*)
+            [[ "${MOCK_CONNECT_OK:-true}" == true ]] || return 1
+            printf 'HTTP/1.1 200 Connection Established\r\n\r\n'
+            return 0
+            ;;
+        *"CONNECT "*) printf 'HTTP/1.1 403 Forbidden\r\n\r\n'; return 0 ;;
+        *" 4000"*) return 0 ;;
+        *"nc "*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 case "${1:-}" in
     __add-runtime)
         write_value runtime_session "${2:?}"
@@ -147,47 +194,26 @@ case "${1:-}" in
             write_value "${role}_sandbox" "$sandbox"
             : > "$STATE/${role}_exists"
         fi
-        if [[ "${MOCK_PROBE_INFRA_FAIL:-false}" == true && "$text" == *"-probe:v2"* ]]; then exit 125; fi
-        case "$text" in
-            *"route show default"*"asf-route-probe"*) exit 22 ;;
-            *"asf-probe-response"*"GET http://"*:9000/*)
-                if [[ "${MOCK_PORT_ENFORCED:-true}" == true ]]; then
-                    printf 'HTTP/1.1 403 Forbidden\n'
-                    exit 40
-                fi
-                printf 'HTTP/1.1 200 OK\n'
-                exit 20
-                ;;
-            *"asf-probe-response"*"CONNECT statsig.com:443"*|*"asf-probe-response"*"CONNECT github.com:443"*|*"asf-probe-response"*"CONNECT pypi.org:443"*)
-                if [[ "${MOCK_CONNECT_OK:-true}" == true ]]; then
-                    printf 'HTTP/1.1 200 Connection Established\n'
-                    exit 20
-                fi
-                exit 61
-                ;;
-            *"asf-probe-response"*"CONNECT "*)
-                printf 'HTTP/1.1 403 Forbidden\n'
-                exit 40
-                ;;
-            *"ip -4 route show default"*|*"ip -6 route show default"*) exit 0 ;;
-            *"ip -4 route get 1.1.1.1"*) echo "RTNETLINK answers: Network is unreachable" >&2; exit 1 ;;
-            *nslookup*) exit 1 ;;
-            *"GET http://"*:9000/*)
-                if [[ "${MOCK_PORT_ENFORCED:-true}" == true ]]; then
-                    printf 'HTTP/1.1 403 Forbidden\r\n\r\n'
-                else
-                    printf 'HTTP/1.1 200 OK\r\n\r\n'
-                fi
-                exit 0
-                ;;
-            *"CONNECT statsig.com:443"*|*"CONNECT github.com:443"*|*"CONNECT pypi.org:443"*)
-                [[ "${MOCK_CONNECT_OK:-true}" == true ]] || exit 1
-                printf 'HTTP/1.1 200 Connection Established\r\n\r\n'; exit 0 ;;
-            *"CONNECT "*) printf 'HTTP/1.1 403 Forbidden\r\n\r\n'; exit 0 ;;
-            *" 4000"*) exit 0 ;;
-            *"nc "*) exit 1 ;;
-            *) exit 0 ;;
-        esac
+        probe_result "$text"
+        exit $?
+        ;;
+    exec)
+        input=""
+        for arg in "$@"; do
+            if [[ "$arg" == -i ]]; then
+                input=$(cat || true)
+                break
+            fi
+        done
+        text="$* $input"
+        if [[ "$text" == *"-verify-"* ]]; then
+            if [[ "${MOCK_PROBE_INFRA_FAIL:-false}" == true ]]; then
+                exit 125
+            fi
+            probe_result "$text"
+            exit $?
+        fi
+        exit 0
         ;;
     rm)
         shift
@@ -198,7 +224,7 @@ case "${1:-}" in
             [[ "$arg" == -* ]] || remove_container "$arg"
         done
         ;;
-    stop|exec|info|version|image|pull|build|logs)
+    stop|info|version|image|pull|build|logs)
         if [[ "${1:-}" == info ]]; then echo 'true netavark'; fi
         if [[ "${1:-}" == version ]]; then echo '5.0.0-fake'; fi
         exit 0

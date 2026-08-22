@@ -44,8 +44,8 @@ _HASH_LENGTH: Final = 12
 _DEFAULT_BASENAME: Final = "sandbox"
 
 
-EphemeralRole = Literal["proxy", "litellm", "gateway"]
-_EPHEMERAL_ROLES: Final = frozenset({"proxy", "litellm", "gateway"})
+EphemeralRole = Literal["proxy", "litellm", "gateway", "network-observer"]
+_EPHEMERAL_ROLES: Final = frozenset({"proxy", "litellm", "gateway", "network-observer"})
 
 
 class CheckoutPathError(ValidationError):
@@ -223,7 +223,7 @@ class ResourceIdentity:
     def ephemeral_container(
         self, runtime: str, role: EphemeralRole, owner_pid: int
     ) -> str:
-        """Return a PID-scoped proxy, broker, or gateway container name."""
+        """Return a PID-scoped support-container name."""
 
         if role not in _EPHEMERAL_ROLES:
             raise InvalidNameError(f"unsupported ephemeral role: {role!r}")

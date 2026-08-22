@@ -137,6 +137,7 @@ class _Report:
         self.events: list[OutputEvent] = []
         self.passed = 0
         self.failed = 0
+        self.partial = False
         self._event_sink = event_sink
 
     def _append(self, event: OutputEvent) -> None:
@@ -164,6 +165,10 @@ class _Report:
     def skip(self, text: str) -> None:
         self.out(f"  {_D}– {text}{_N}\n")
 
+    def mark_partial(self, text: str) -> None:
+        self.partial = True
+        self.warning(text)
+
     def finish(self) -> SecurityTestResult:
         self.out("\n")
         if self.failed:
@@ -172,6 +177,14 @@ class _Report:
                 f"{self.passed} passed.{_N}\n"
             )
             return SecurityTestResult(1, tuple(self.events))
+        if self.partial:
+            self.out(
+                f"{_Y}Security test partial: {self.passed} host-side/support "
+                f"checks passed; in-guest checks were unavailable.{_N}\n"
+            )
+            # Partial security coverage must not be indistinguishable from a
+            # complete pass to scripts consuming the command status.
+            return SecurityTestResult(2, tuple(self.events))
         self.out(f"{_G}Security test passed: {self.passed} checks.{_N}\n")
         return SecurityTestResult(0, tuple(self.events))
 
@@ -228,7 +241,7 @@ def run_security_test_command(
             SessionRole.ROUTED_INIT,
         )
     }
-    runtime_executors = [RuntimeExecExecutor(client, runtime_id)]
+    support_executors: list[RuntimeExecExecutor] = []
     for role in (
         SessionRole.BROKER,
         SessionRole.PROXY,
@@ -236,19 +249,32 @@ def run_security_test_command(
     ):
         reference = role_ids[role]
         if reference:
-            runtime_executors.append(RuntimeExecExecutor(client, reference))
-    engine = VerificationEngine(
-        (
-            *runtime_executors,
-            EphemeralProbeExecutor(
-                client,
-                names.internal,
-                paths.identity.probe_image(_PROBE_REVISION),
-            ),
+            support_executors.append(RuntimeExecExecutor(client, reference))
+    network_probe = EphemeralProbeExecutor(
+        client,
+        names.internal,
+        paths.identity.probe_image(_PROBE_REVISION),
+    )
+    if manifest.runtime.isolation == "microvm":
+        # The krun backend cannot exec a diagnostic process in the running
+        # microVM. Generic network probes therefore use a short-lived container
+        # on the same ASF internal network. This proves the surrounding Podman
+        # policy, not the guest itself, so the final verdict is explicitly partial.
+        executors = (
+            network_probe,
+            *support_executors,
             PodmanInspectExecutor(client),
             HostProbeExecutor(),
         )
-    )
+    else:
+        executors = (
+            RuntimeExecExecutor(client, runtime_id),
+            *support_executors,
+            network_probe,
+            PodmanInspectExecutor(client),
+            HostProbeExecutor(),
+        )
+    engine = VerificationEngine(executors)
 
     report = _Report(event_sink)
     report.out(
@@ -283,13 +309,22 @@ def run_security_test_command(
             PolicyExpectation.ALLOW,
             TcpProbe(broker, _BROKER_PORT),
         )
+        broker_networks = [names.internal, names.provider]
+        broker_network_description = (
+            "LiteLLM is attached only to internal and provider networks"
+        )
+        if mode == "routed" and manifest.runtime.isolation == "microvm":
+            broker_networks.append(names.scan)
+            broker_network_description = (
+                "LiteLLM is attached only to internal, provider, and scan networks"
+            )
         _container_check(
             report,
             engine,
-            "LiteLLM is attached only to internal and provider networks",
+            broker_network_description,
             broker,
             ContainerPolicyCondition.NETWORKS_EXACT,
-            expected_items=(names.internal, names.provider),
+            expected_items=tuple(broker_networks),
         )
         _runtime_check(
             report,
@@ -325,15 +360,21 @@ def run_security_test_command(
             report.bad("provider credential name is available")
         else:
             provider_value = _read_secret(paths, manifest, key_name)
-            _runtime_check(
-                report,
-                engine,
-                "provider credential is not present in the agent",
-                runtime_id,
-                RuntimeSecurityCondition.PROVIDER_CREDENTIAL_ABSENT,
-                expected_text=key_name,
-                secret=provider_value,
-            )
+            if manifest.runtime.isolation == "microvm":
+                report.skip(
+                    "provider credential absence inside the microVM guest "
+                    "requires in-guest execution"
+                )
+            else:
+                _runtime_check(
+                    report,
+                    engine,
+                    "provider credential is not present in the agent",
+                    runtime_id,
+                    RuntimeSecurityCondition.PROVIDER_CREDENTIAL_ABSENT,
+                    expected_text=key_name,
+                    secret=provider_value,
+                )
 
     if mode == "proxy":
         _run_proxy_checks(
@@ -349,7 +390,7 @@ def run_security_test_command(
             names.egress,
         )
     elif mode == "isolated":
-        _run_isolated_checks(report, engine, runtime_id)
+        _run_isolated_checks(report, engine, manifest, runtime_id)
     elif mode == "routed":
         _run_routed_checks(
             report,
@@ -411,93 +452,104 @@ def _run_common_checks(
     internal_network: str,
     scan_network: str,
 ) -> None:
-    networks = (
-        (internal_network, scan_network)
-        if manifest.network.mode == "routed"
-        else (internal_network,)
-    )
-    description = (
-        "agent is attached only to internal and scan networks"
-        if manifest.network.mode == "routed"
-        else "agent is attached only to the internal network"
-    )
-    _container_check(
-        report,
-        engine,
-        description,
-        runtime_id,
-        ContainerPolicyCondition.NETWORKS_EXACT,
-        expected_items=networks,
-    )
-    expected_caps = 1 << 13 if "net_raw" in manifest.capabilities else 0
-    _runtime_check(
-        report,
-        engine,
-        "effective capabilities match the manifest",
-        runtime_id,
-        RuntimeSecurityCondition.CAPABILITIES_EQUAL,
-        expected_text=f"{expected_caps:016x}",
-    )
-    for description, condition, expectation in (
-        (
-            "runtime user is UID/GID 1000",
-            RuntimeSecurityCondition.UID_GID_1000,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "no-new-privileges is enabled",
-            RuntimeSecurityCondition.NO_NEW_PRIVILEGES,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "sudo is absent",
-            RuntimeSecurityCondition.SUDO_ABSENT,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "Podman socket is absent",
-            RuntimeSecurityCondition.PODMAN_SOCKET_ABSENT,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "host secrets are masked by tmpfs",
-            RuntimeSecurityCondition.SECRETS_MASKED_EMPTY,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "framework checkout is read-only",
-            RuntimeSecurityCondition.CHECKOUT_READ_ONLY,
-            PolicyExpectation.DENY,
-        ),
-        (
-            "system directories are not writable",
-            RuntimeSecurityCondition.SYSTEM_DIRS_READ_ONLY,
-            PolicyExpectation.DENY,
-        ),
-        (
-            "SSH private-key files are absent",
-            RuntimeSecurityCondition.SSH_PRIVATE_KEYS_ABSENT,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "IPv4 forwarding is disabled",
-            RuntimeSecurityCondition.IPV4_FORWARDING_DISABLED,
-            PolicyExpectation.ALLOW,
-        ),
-        (
-            "IPv6 forwarding is disabled",
-            RuntimeSecurityCondition.IPV6_FORWARDING_DISABLED,
-            PolicyExpectation.ALLOW,
-        ),
-    ):
-        _runtime_check(
+    if manifest.runtime.isolation == "microvm":
+        # The Podman object is the VMM process, not the guest network stack.
+        # krun also provides no exec transport into a running guest, so the
+        # in-guest assertions cannot be collected on demand. Host-side,
+        # inspect-based, and ephemeral-probe checks below still run; the
+        # per-session egress verdicts live in verification-report.json.
+        report.mark_partial(
+            "microVM has no exec transport; in-guest runtime checks are "
+            "skipped (see docs/KRUN.md)"
+        )
+    else:
+        expected_caps = 1 << 13 if "net_raw" in manifest.capabilities else 0
+        networks = (
+            (internal_network, scan_network)
+            if manifest.network.mode == "routed"
+            else (internal_network,)
+        )
+        description = (
+            "agent is attached only to internal and scan networks"
+            if manifest.network.mode == "routed"
+            else "agent is attached only to the internal network"
+        )
+        _container_check(
             report,
             engine,
             description,
             runtime_id,
-            condition,
-            expectation=expectation,
+            ContainerPolicyCondition.NETWORKS_EXACT,
+            expected_items=networks,
         )
+        _runtime_check(
+            report,
+            engine,
+            "effective capabilities match the manifest",
+            runtime_id,
+            RuntimeSecurityCondition.CAPABILITIES_EQUAL,
+            expected_text=f"{expected_caps:016x}",
+        )
+        for description, condition, expectation in (
+            (
+                "runtime user is UID/GID 1000",
+                RuntimeSecurityCondition.UID_GID_1000,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "no-new-privileges is enabled",
+                RuntimeSecurityCondition.NO_NEW_PRIVILEGES,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "sudo is absent",
+                RuntimeSecurityCondition.SUDO_ABSENT,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "Podman socket is absent",
+                RuntimeSecurityCondition.PODMAN_SOCKET_ABSENT,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "host secrets are masked by tmpfs",
+                RuntimeSecurityCondition.SECRETS_MASKED_EMPTY,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "framework checkout is read-only",
+                RuntimeSecurityCondition.CHECKOUT_READ_ONLY,
+                PolicyExpectation.DENY,
+            ),
+            (
+                "system directories are not writable",
+                RuntimeSecurityCondition.SYSTEM_DIRS_READ_ONLY,
+                PolicyExpectation.DENY,
+            ),
+            (
+                "SSH private-key files are absent",
+                RuntimeSecurityCondition.SSH_PRIVATE_KEYS_ABSENT,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "IPv4 forwarding is disabled",
+                RuntimeSecurityCondition.IPV4_FORWARDING_DISABLED,
+                PolicyExpectation.ALLOW,
+            ),
+            (
+                "IPv6 forwarding is disabled",
+                RuntimeSecurityCondition.IPV6_FORWARDING_DISABLED,
+                PolicyExpectation.ALLOW,
+            ),
+        ):
+            _runtime_check(
+                report,
+                engine,
+                description,
+                runtime_id,
+                condition,
+                expectation=expectation,
+            )
     _container_check(
         report,
         engine,
@@ -642,15 +694,28 @@ def _run_proxy_checks(
                 ProxyConnectProbe(proxy, _PROXY_PORT, blocked_domain, 443),
             )
 
-    _route_boundary_checks(report, engine, runtime_id, dns=False)
+    _route_boundary_checks(
+        report,
+        engine,
+        runtime_id,
+        dns=False,
+        microvm=manifest.runtime.isolation == "microvm",
+    )
 
 
 def _run_isolated_checks(
     report: _Report,
     engine: VerificationEngine,
+    manifest: RuntimeManifest,
     runtime_id: str,
 ) -> None:
-    _route_boundary_checks(report, engine, runtime_id, dns=True)
+    _route_boundary_checks(
+        report,
+        engine,
+        runtime_id,
+        dns=True,
+        microvm=manifest.runtime.isolation == "microvm",
+    )
 
 
 def _route_boundary_checks(
@@ -659,44 +724,51 @@ def _route_boundary_checks(
     runtime_id: str,
     *,
     dns: bool,
+    microvm: bool = False,
 ) -> None:
+    subject = "runtime network probe" if microvm else "agent"
     _check(
         report,
         engine,
-        "agent has no IPv4 default route",
+        f"{subject} has no IPv4 default route",
         PolicyExpectation.DENY,
         RouteProbe(family=NetworkFamily.IPV4),
     )
     _check(
         report,
         engine,
-        "agent has no IPv6 default route",
+        f"{subject} has no IPv6 default route",
         PolicyExpectation.DENY,
         RouteProbe(family=NetworkFamily.IPV6),
     )
     _check(
         report,
         engine,
-        "agent has no direct public route",
+        f"{subject} has no direct public route",
         PolicyExpectation.DENY,
         RouteProbe("1.1.1.1"),
     )
     _check(
         report,
         engine,
-        "agent has no direct private-network route",
+        f"{subject} has no direct private-network route",
         PolicyExpectation.DENY,
         RouteProbe("192.168.1.1"),
     )
     if dns:
-        _runtime_check(
-            report,
-            engine,
-            "external DNS is unavailable",
-            runtime_id,
-            RuntimeSecurityCondition.EXTERNAL_DNS_UNAVAILABLE,
-            expectation=PolicyExpectation.DENY,
-        )
+        if microvm:
+            report.skip(
+                "external DNS state inside the microVM guest requires in-guest execution"
+            )
+        else:
+            _runtime_check(
+                report,
+                engine,
+                "external DNS is unavailable",
+                runtime_id,
+                RuntimeSecurityCondition.EXTERNAL_DNS_UNAVAILABLE,
+                expectation=PolicyExpectation.DENY,
+            )
 
 
 def _run_routed_checks(
@@ -781,25 +853,32 @@ def _run_routed_checks(
     else:
         report.bad("routed gateway is running")
 
+    if manifest.runtime.isolation == "microvm":
+        report.skip(
+            "routed microVM guest connectivity, routes, and DNS require "
+            "in-guest execution; use the session startup verification evidence"
+        )
+        return
+
     verification = manifest.network.routed_verification
-    if verification is None:
-        raise ConfigurationError("routed manifest has no verification control")
-    address = str(verification.address)
-    _check(
-        report,
-        engine,
-        "allowed routed TCP control is reachable",
-        PolicyExpectation.ALLOW,
-        TcpProbe(address, verification.allowed_port),
-    )
-    _check(
-        report,
-        engine,
-        "known-open blocked routed port is denied",
-        PolicyExpectation.DENY,
-        TcpProbe(address, verification.blocked_port),
-    )
+    if verification is not None:
+        address = str(verification.address)
+        _check(
+            report,
+            engine,
+            "allowed routed TCP control is reachable",
+            PolicyExpectation.ALLOW,
+            TcpProbe(address, verification.allowed_port),
+        )
+        _check(
+            report,
+            engine,
+            "known-open blocked routed port is denied",
+            PolicyExpectation.DENY,
+            TcpProbe(str(verification.denied_address), verification.blocked_port),
+        )
     seen: set[str] = set()
+    policy_destinations = tuple(rule.destination for rule in manifest.network.routed_rules)
     for rule in manifest.network.routed_rules:
         cidr = str(rule.destination)
         if cidr in seen:
@@ -813,6 +892,18 @@ def _run_routed_checks(
             RuntimeSecurityCondition.ROUTED_CIDR_PRESENT,
             expected_text=cidr,
         )
+    if verification is not None:
+        denied = verification.denied_address
+        if not any(denied in destination for destination in policy_destinations):
+            cidr = f"{denied}/32"
+            _runtime_check(
+                report,
+                engine,
+                f"verification route {cidr} is present",
+                runtime_id,
+                RuntimeSecurityCondition.ROUTED_CIDR_PRESENT,
+                expected_text=cidr,
+            )
     _check(
         report,
         engine,

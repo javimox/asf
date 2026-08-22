@@ -1,7 +1,8 @@
-# The devcontainer CLI in ASF
+# The Dev Container CLI in ASF
 
-What ASF uses it for, what it provides, and what it would cost to remove.
-Written so the dependency is a deliberate choice rather than an accident.
+What the default ASF container backend uses it for and what it provides.
+`runtime.isolation: microvm` bypasses this layer and uses direct Podman commands;
+see [krun microVM isolation](KRUN.md).
 
 ## What ASF uses
 
@@ -47,9 +48,9 @@ manifest; it is never hand-edited.
   setup, which remains an open question for any future shared-network-namespace
   design.
 
-Because every key maps 1:1 to a podman flag, replacing the CLI with direct
-`podman build` / `run` / `exec` is feasible. It has not been done because
-editor attach is worth the layer.
+Because every key maps closely to Podman flags, a direct lifecycle is feasible.
+The krun backend uses direct `podman build` / `run`, while the default container
+backend keeps Dev Containers for editor attach and `exec` support.
 
 ## CLI quirks discovered the hard way
 

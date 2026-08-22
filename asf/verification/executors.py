@@ -201,11 +201,16 @@ class RuntimeExecExecutor:
                 probe, self.netcat, self.ip, self.nslookup
             )
         try:
+            # The probe timeout belongs to the diagnostic command itself
+            # (for TCP, ``nc -w`` uses the same budget).  Keep a small
+            # outer margin for ``podman exec`` setup/teardown so an expected
+            # firewall timeout is observed as DENIED rather than mistaken
+            # for an infrastructure timeout.
             result = self.podman.exec_container(
                 self.container,
                 command,
                 check=False,
-                timeout=probe.timeout_seconds,
+                timeout=probe.timeout_seconds + 2.0,
                 input_text=input_text,
             )
         except ObjectNotFoundError:

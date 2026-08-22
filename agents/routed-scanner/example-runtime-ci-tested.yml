@@ -8,17 +8,16 @@
 # every address with your own target. That is intentional: a copyable example
 # pointing at a real address would silently probe whatever host now owns it.
 #
-# To make it work:
+# This CI template deliberately enables optional `network.verify` so tests can
+# prove both an allowed and a known-open blocked TCP path. Normal pentest
+# runtimes do not require verification endpoints; see runtime.yml.
 #
+# To exercise this template manually:
 #   1. Choose a target you are authorised to scan.
-#   2. It needs TWO open TCP ports: one you allow, and one you deliberately do
-#      NOT allow. The blocked port must be OPEN on the target — ASF refuses to
-#      treat an unreachable closed port as proof of enforcement.
+#   2. Provide two known-open TCP endpoints: one allowed by policy and one
+#      intentionally blocked.
 #      A ready-made target:  python3 tests/helpers/routed_test_target.py --help
 #   3. Replace every 192.0.2.10 below, and both port numbers.
-#
-# ASF verifies this before the runtime starts and aborts if the allowed port is
-# unreachable or the blocked port is reachable.
 
 name: routed-scanner
 adapter: generic

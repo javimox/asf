@@ -232,6 +232,7 @@ class ProxyService:
         if not isinstance(request, ProxyRequest):
             raise TypeError("request must be a ProxyRequest")
         self.podman.require_available()
+        started = time.monotonic()
         _print_policy(request, output)
         _prepare_directory(request)
         _write_atomic(request.config_dir / "Containerfile", render_containerfile())
@@ -272,7 +273,8 @@ class ProxyService:
         self._wait_ready(request)
         output.write(
             f"  \033[0;32m✓\033[0m Egress proxy ready "
-            f"\033[2m(caddy, :{request.port})\033[0m\n"
+            f"\033[2m(caddy, :{request.port}; "
+            f"{time.monotonic() - started:.1f}s)\033[0m\n"
         )
 
 

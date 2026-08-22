@@ -4,7 +4,7 @@ How a runtime reaches anything outside itself. Three modes, one invariant, and
 a verification gate on each.
 
 Status: **implemented for proxy, isolated, and routed modes.**
-Host-specific routed verification remains required before relying on a new environment.
+Routed startup always checks structural invariants; live target verification is optional.
 
 ---
 
@@ -124,25 +124,28 @@ pointing at the gateway; it never configures anything itself.
 network:
   mode: routed
   allow:
+    - cidr: 192.168.40.20/32       # destination only: all IP traffic
     - cidr: 192.168.50.0/24
-      protocol: tcp                # ONE protocol per rule
+      protocol: tcp                # ONE protocol per restricted rule
       ports: any
     - cidr: 192.168.50.0/24
       protocol: icmp_echo          # no ports key: echo request/reply only
     - cidr: 192.168.60.20/32
       protocol: udp
       ports: [161]
-  verify:                          # two known-open TCP controls
-    address: 192.0.2.2
+  verify:                          # known-open positive and negative controls
+    address: 192.168.40.20
     protocol: tcp
     port: 18080                    # allowed
-    blocked_port: 19999            # open on target, denied by policy
+    blocked_address: 192.0.2.3     # optional; defaults to address
+    blocked_port: 19999            # open there, denied by policy
 ```
 
-One protocol per rule rather than a list: it makes each generated nftables rule
-a direct translation of one manifest line, and removes the `ports`-with-`icmp`
-ambiguity entirely. `icmp_echo` names exactly what is permitted (echo
-request/reply), not all of ICMP.
+A destination-only rule omits both `protocol` and `ports` and allows all IP
+traffic to that declared IP/CIDR. Restricted rules keep one protocol per rule,
+which makes each generated nftables rule a direct translation of one manifest
+line and removes the `ports`-with-`icmp` ambiguity. `icmp_echo` names exactly
+what is permitted (echo request/reply), not all of ICMP.
 
 The gateway enables IPv4 forwarding, installs a default-deny nftables `forward`
 chain with one accept rule per declared tuple, and source-NATs to the declared
@@ -209,14 +212,17 @@ A deny-check only means something if a matching allow-check succeeded. Without
 a known-reachable destination, "everything was blocked" and "nothing was
 configured" are indistinguishable.
 
-`verify` is mandatory for routed mode. It declares one allowed TCP port and
-one second TCP port that is known to be open on the same target but omitted from
-policy. ASF first confirms both ports are reachable from the host. It then
-proves that the runtime can reach the allowed port and cannot reach the
-known-open blocked port.
+`verify` is optional. Normal pentest/discovery sessions do not need to prepare
+known-open services on the target. Without `verify`, ASF still checks the
+structural routed invariants it controls: declared routes are present, IPv4 and
+IPv6 default routes are absent, undeclared destinations have no route, and
+external DNS is unavailable.
 
-If either host control is unreachable, routed startup aborts. A closed service
-is never accepted as evidence that nftables blocked the connection.
+For controlled acceptance tests, `verify` adds a stronger live proof. It declares
+one allowed TCP endpoint and one known-open TCP endpoint that policy must block.
+ASF first confirms both endpoints are reachable from the host, then proves that
+the runtime can reach the allowed endpoint and cannot reach the blocked one. A
+closed service is never accepted as evidence that nftables blocked a connection.
 
 ## 3. Manifest schema
 
@@ -229,15 +235,17 @@ network:
 
   # mode: routed
   allow:
+    - cidr: 192.168.40.20/32     # no protocol/ports: all IP traffic
     - cidr: 192.168.50.0/24      # literal IP/CIDR, never a hostname
-      protocol: tcp              # one protocol per rule
+      protocol: tcp              # one protocol per restricted rule
       ports: [18080]
     - cidr: 192.168.50.0/24
       protocol: icmp_echo        # no ports key
   verify:
-    address: 192.168.50.10
+    address: 192.168.40.20
     protocol: tcp
     port: 18080
+    blocked_address: 192.168.50.11  # optional; defaults to address
     blocked_port: 19999
 ```
 
@@ -245,11 +253,18 @@ Rules:
 
 - unknown keys are **rejected**, as everywhere else in `runtime.yml`
 - `allow_domains` is only valid with `mode: proxy`; `allow` only with `routed`
+- omitting both `protocol` and `ports` allows all IP traffic to that CIDR
+- `ports` without `protocol` is rejected
 - `icmp_echo` accepts no `ports` key; TCP and UDP require `ports`
 - a field that cannot be enforced is rejected rather than ignored
 - `mode: isolated` accepts neither
-- routed mode requires a TCP `verify` block whose allowed and blocked ports are
-  both known to be open on the target
+- routed `verify` is optional; when present it uses known-open allowed and blocked
+  TCP endpoints for a live enforcement proof; `blocked_address` defaults to
+  `address`
+- when `blocked_address` is separate, ASF installs a verification-only `/32`
+  route and masquerades that probe destination so a deny result cannot be
+  explained by a missing return route; nftables still denies it because the
+  address is absent from every accept rule
 
 ### `proxy` + `routed` is rejected in v1
 
@@ -413,9 +428,10 @@ networks between separate ASF runtimes.
 - **Target-side attribution shows the host**, not the runtime — double NAT
   (gateway masquerade, then rootless Podman NAT). Do not rely on source IP at
   the target to identify which runtime probed it.
-- **NSE / service detection** needs the `nmap-scripts` package in the image;
-  without it `-sV` fails with `could not locate nse_main.lua`. Packaging, not
-  topology.
+- **NSE / service detection** depends on Nmap's shared data files. Nmap is not
+  installed in the shared agent image; if a dedicated scanner image adds it,
+  its NSE data must be packaged with it. That is an image-packaging concern,
+  not a routed-topology limitation.
 - **IPv4 only, for now.** Routed mode is IPv4-only; runtimes have no IPv6
   default route and IPv6 forwarding is disabled. The spikes verify both. This
   is a deliberate v1 scope limit, not a permanent design choice — IPv6 support

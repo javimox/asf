@@ -77,6 +77,14 @@ class RoutedRuleTests(unittest.TestCase):
         self.assertTrue(icmp_rule.permits(address, "icmp_echo"))
         self.assertFalse(icmp_rule.permits(address, "icmp_echo", 8))
 
+    def test_destination_only_rule_allows_any_supported_ip_protocol(self) -> None:
+        rule = RoutedRule(IPv4Network("192.0.2.1/32"))
+        address = IPv4Address("192.0.2.1")
+        self.assertTrue(rule.permits(address, "tcp", 443))
+        self.assertTrue(rule.permits(address, "udp", 53))
+        self.assertTrue(rule.permits(address, "icmp_echo"))
+        self.assertFalse(rule.permits(IPv4Address("192.0.2.2"), "tcp", 443))
+
     def test_verification_uses_typed_addresses_and_ports(self) -> None:
         verification = RoutedVerification(
             address=IPv4Address("192.0.2.9"),

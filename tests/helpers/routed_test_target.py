@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run two TCP listeners for ASF routed-mode verification."""
+"""Run TCP and UDP listeners for ASF routed-mode verification."""
 from __future__ import annotations
 
 import argparse
@@ -8,14 +8,30 @@ import socketserver
 import threading
 
 
-class Handler(socketserver.BaseRequestHandler):
+class TCPHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
-        self.request.sendall(b"ASF routed test target\n")
+        self.request.sendall(b"ASF routed TCP test target\n")
 
 
-class Server(socketserver.ThreadingTCPServer):
+class UDPHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        data, sock = self.request
+        sock.sendto(b"ASF routed UDP test target: " + data, self.client_address)
+
+
+class TCPServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
+
+
+class UDPServer(socketserver.ThreadingUDPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+def _port(parser: argparse.ArgumentParser, name: str, value: int) -> None:
+    if not 1 <= value <= 65535:
+        parser.error(f"{name} must be between 1 and 65535")
 
 
 def main() -> int:
@@ -23,27 +39,46 @@ def main() -> int:
     parser.add_argument("--bind", default="0.0.0.0")
     parser.add_argument("--allowed-port", type=int, default=18080)
     parser.add_argument("--blocked-port", type=int, default=19999)
+    parser.add_argument("--allowed-udp-port", type=int, default=18161)
+    parser.add_argument("--blocked-udp-port", type=int, default=19998)
     args = parser.parse_args()
-    if not 1 <= args.allowed_port <= 65535:
-        parser.error("--allowed-port must be between 1 and 65535")
-    if not 1 <= args.blocked_port <= 65535:
-        parser.error("--blocked-port must be between 1 and 65535")
-    if args.allowed_port == args.blocked_port:
-        parser.error("the two ports must differ")
+
+    ports = {
+        "--allowed-port": args.allowed_port,
+        "--blocked-port": args.blocked_port,
+        "--allowed-udp-port": args.allowed_udp_port,
+        "--blocked-udp-port": args.blocked_udp_port,
+    }
+    for name, value in ports.items():
+        _port(parser, name, value)
+    if len(set(ports.values())) != len(ports):
+        parser.error("test ports must be different")
 
     servers = [
-        Server((args.bind, args.allowed_port), Handler),
-        Server((args.bind, args.blocked_port), Handler),
+        TCPServer((args.bind, args.allowed_port), TCPHandler),
+        TCPServer((args.bind, args.blocked_port), TCPHandler),
+        UDPServer((args.bind, args.allowed_udp_port), UDPHandler),
+        UDPServer((args.bind, args.blocked_udp_port), UDPHandler),
     ]
-    threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in servers]
-    for thread in threads:
-        thread.start()
+    for server in servers:
+        threading.Thread(target=server.serve_forever, daemon=True).start()
 
-    print(f"ASF routed target listening on {args.bind}:{args.allowed_port} and {args.blocked_port}", flush=True)
+    print(
+        "ASF routed target listening on "
+        f"{args.bind}:tcp/{args.allowed_port}, tcp/{args.blocked_port}, "
+        f"udp/{args.allowed_udp_port}, udp/{args.blocked_udp_port}",
+        flush=True,
+    )
+
     stopped = threading.Event()
+
+    def stop(*_: object) -> None:
+        stopped.set()
+
     for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, lambda *_: stopped.set())
+        signal.signal(sig, stop)
     stopped.wait()
+
     for server in servers:
         server.shutdown()
         server.server_close()

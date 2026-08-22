@@ -216,6 +216,7 @@ class GenerateDevcontainerTests(unittest.TestCase):
             network=NetworkPolicy(mode="proxy"),
             environment=(
                 EnvironmentVariable("ASF_AGENT", "wrong"),
+                EnvironmentVariable("ASF_ISOLATION", "microvm"),
                 EnvironmentVariable("HTTP_PROXY", "http://wrong:9999"),
                 EnvironmentVariable("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             ),
@@ -224,6 +225,7 @@ class GenerateDevcontainerTests(unittest.TestCase):
         config = build_devcontainer_config(request)
         environment = config["containerEnv"]
         self.assertEqual(environment["ASF_AGENT"], "hermes")
+        self.assertEqual(environment["ASF_ISOLATION"], "container")
         self.assertEqual(environment["HTTP_PROXY"], f"http://{PROXY_INTERNAL_ALIAS}:3128")
         self.assertEqual(environment["OPENAI_BASE_URL"], f"http://{BROKER_INTERNAL_ALIAS}:4000/v1")
 
@@ -495,6 +497,14 @@ class BrokerDiagnosticTests(unittest.TestCase):
         self.assertEqual(endpoint, "/v1/chat/completions")
         self.assertEqual(payload["max_completion_tokens"], 128)
         self.assertNotIn("temperature", payload)
+
+
+class DockerfileZshCompletionTests(unittest.TestCase):
+    def test_completion_cache_is_built_without_interactive_zsh(self):
+        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text()
+        self.assertIn("compinit -d \"$ZSH_COMPDUMP\"", dockerfile)
+        self.assertIn("RUN zsh -f -c", dockerfile)
+        self.assertNotIn("zsh -i -c exit", dockerfile)
 
 
 if __name__ == "__main__":

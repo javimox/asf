@@ -13,6 +13,7 @@ ownership, agent selection, Git workflow, and useful local notes.
                                (removes ephemeral containers automatically on exit)
 ./sandbox.sh shell [agent]     attach to an already-running container
 ./sandbox.sh ls                show running and deployed agent sessions
+./sandbox.sh observe [agent]   show host-side session and privilege state
 ./sandbox.sh stop [agent]      stop one session, or all of them
 ./sandbox.sh reset <agent>     clear one agent's persistent state volume
 ./sandbox.sh build <agent>     rebuild one agent image
@@ -59,7 +60,7 @@ mapping. The `podman` package sets these up for your user on install. Verify:
 ```bash
 grep "$(id -un)" /etc/subuid /etc/subgid    # should print a range for your user
 ```
-### devcontainer CLI
+### devcontainer CLI (default container backend)
 
 Install it as normal (unprivileged) user:
 
@@ -71,6 +72,10 @@ Or using npm:
 ```bash
 npm install -g @devcontainers/cli
 ```
+
+The optional `runtime.isolation: microvm` backend does not use the Dev Container
+CLI. It requires a Linux host with KVM plus krun/libkrun instead. See
+[krun microVM isolation](KRUN.md) for installation and current limitations.
 ### Python 3
 
 ASF uses Python for all host-side orchestration, deterministic configuration
@@ -84,8 +89,9 @@ python3 -c 'import yaml'
 
 ASF uses one Python production path for every command and network mode.
 
-The sandbox drives the devcontainer CLI with `--docker-path podman`, so it uses
-Podman everywhere with no Docker installed.
+The default backend drives the devcontainer CLI with `--docker-path podman`, so
+it uses Podman everywhere with no Docker installed. The krun backend calls Podman
+directly and likewise does not require Docker.
 ### Pinned build dependencies
 
 Top-level image, agent, and tool versions live in `asf.conf`. ASF passes
@@ -131,7 +137,8 @@ The `1000` in the `keep-id` mapping is the `node` user's fixed UID in the image,
 not your host UID — so this works regardless of what UID your host account has.
 
 **Note on `--userns`:** the devcontainer CLI auto-injects `--userns=keep-id` for
-Podman, which maps your host user to the same UID inside the container. Since
+the default container backend. The krun backend sets
+`--userns=keep-id:uid=1000,gid=1000` explicitly. Since
 `node` is UID 1000 and most Linux host accounts are also 1000, this maps
 host→node correctly with no extra flag. **If your host UID is not 1000**, add
 `"--userns=keep-id:uid=1000,gid=1000"` to `runArgs` in `devcontainer.base.json`

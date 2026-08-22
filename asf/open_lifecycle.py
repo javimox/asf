@@ -19,7 +19,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TextIO
@@ -165,10 +165,19 @@ class SessionProcessSupervisor:
         if self.poll_interval <= 0:
             raise ValidationError("poll_interval must be positive")
 
-    def run(self, argv: Sequence[str]) -> SessionProcessResult:
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+    ) -> SessionProcessResult:
         command = _normalise_child_argv(argv)
+        child_env = None if env is None else {**os.environ, **env}
         try:
-            child = self.popen_factory(command, shell=False)
+            if child_env is None:
+                child = self.popen_factory(command, shell=False)
+            else:
+                child = self.popen_factory(command, shell=False, env=child_env)
         except FileNotFoundError as exc:
             raise OpenLifecycleError(
                 f"session command not found: {command[0]}"
@@ -252,6 +261,12 @@ class OpenCleanupService:
 
     stop_service: StopService
 
+    def release_lock(self, runtime: str, owner_pid: int) -> None:
+        """Release only the opener lock while preserving detached resources."""
+
+        manager = self.stop_service.discovery.lock_manager()
+        manager.release(manager.owned_token(runtime, owner_pid))
+
     def cleanup(
         self,
         runtime: str,
@@ -287,22 +302,61 @@ def run_open_session(
     owner_pid: int,
     supervisor: SessionProcessSupervisor | None = None,
     event_sink: Callable[[StopEvent], None] | None = None,
+    stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    environment: Mapping[str, str] | None = None,
+    preserve_if_running: Callable[[], bool] | None = None,
 ) -> int:
-    """Run the session command, clean the session, and return its final status."""
+    """Run the session command and clean it unless an attached runtime remains live."""
 
     process = SessionProcessSupervisor() if supervisor is None else supervisor
+    output = sys.stdout if stdout is None else stdout
     errors = sys.stderr if stderr is None else stderr
     process_result: SessionProcessResult | None = None
     process_error: OpenLifecycleError | None = None
     try:
-        process_result = process.run(child_argv)
+        if environment is None:
+            process_result = process.run(child_argv)
+        else:
+            process_result = process.run(child_argv, env=environment)
     except OpenLifecycleError as exc:
         process_error = exc
     finally:
         # A raw or interrupted devcontainer TTY must be usable before cleanup
         # emits diagnostics or waits on Podman.
         restore_terminal(errors)
+
+    if (
+        process_error is None
+        and process_result is not None
+        and process_result.signal is None
+        and process_result.returncode == 0
+        and preserve_if_running is not None
+    ):
+        try:
+            still_running = bool(preserve_if_running())
+        except AsfError as exc:
+            errors.write(
+                f"{_YELLOW}Could not verify detached session state; cleaning up.{_RESET}\n"
+                f"  {exc}\n"
+            )
+        else:
+            if still_running:
+                try:
+                    cleanup.release_lock(runtime, owner_pid)
+                except AsfError as exc:
+                    errors.write(
+                        f"{_RED}Could not release detached session lock.{_RESET}\n"
+                        f"  {exc}\n"
+                    )
+                    return exc.exit_code
+                output.write(
+                    f"\n{_YELLOW}Detached from {runtime}; the krun microVM is still running.{_RESET}\n"
+                    f"  Reattach: ./sandbox.sh shell {runtime}\n"
+                    f"  Stop:     ./sandbox.sh stop {runtime}\n"
+                )
+                output.flush()
+                return 0
 
     cleanup_result: OpenCleanupResult | None = None
     cleanup_error: AsfError | None = None

@@ -15,15 +15,18 @@ __all__ = [
     "EnvironmentVariable",
     "LlmSettings",
     "NetworkPolicy",
+    "ObservabilitySettings",
     "PortPolicy",
     "RoutedRule",
     "RoutedVerification",
     "RuntimeManifest",
+    "RuntimeIsolation",
     "RuntimeSettings",
     "StateVolume",
 ]
 
 RuntimeMode: TypeAlias = Literal["interactive", "service"]
+RuntimeIsolation: TypeAlias = Literal["container", "microvm"]
 NetworkMode: TypeAlias = Literal["isolated", "proxy", "routed"]
 LlmProtocol: TypeAlias = Literal["anthropic", "openai"]
 RoutedProtocol: TypeAlias = Literal["tcp", "udp", "icmp_echo"]
@@ -53,6 +56,7 @@ class RuntimeSettings:
     mode: RuntimeMode = "interactive"
     command: tuple[str, ...] = ()
     build_arguments: tuple[BuildArgument, ...] = ()
+    isolation: RuntimeIsolation = "container"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +72,7 @@ class LlmSettings:
 @dataclass(frozen=True, slots=True)
 class RoutedRule:
     destination: IPv4Network
-    protocol: RoutedProtocol
+    protocol: RoutedProtocol | None = None
     ports: PortPolicy = None
 
     def permits(
@@ -79,7 +83,11 @@ class RoutedRule:
     ) -> bool:
         """Return whether this one rule permits the concrete destination."""
 
-        if protocol != self.protocol or address not in self.destination:
+        if address not in self.destination:
+            return False
+        if self.protocol is None:
+            return True
+        if protocol != self.protocol:
             return False
         if protocol == "icmp_echo":
             return port is None
@@ -96,6 +104,11 @@ class RoutedVerification:
     protocol: Literal["tcp"]
     allowed_port: int
     blocked_port: int
+    blocked_address: IPv4Address | None = None
+
+    @property
+    def denied_address(self) -> IPv4Address:
+        return self.address if self.blocked_address is None else self.blocked_address
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +121,12 @@ class NetworkPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservabilitySettings:
+    llm_prompts: bool = False
+    network_activity: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeManifest:
     name: str
     description: str = ""
@@ -117,6 +136,7 @@ class RuntimeManifest:
     llm: LlmSettings | None = None
     secret_files: tuple[str, ...] = ()
     network: NetworkPolicy = NetworkPolicy()
+    observability: ObservabilitySettings = ObservabilitySettings()
     environment: tuple[EnvironmentVariable, ...] = ()
     capabilities: frozenset[str] = frozenset()
 

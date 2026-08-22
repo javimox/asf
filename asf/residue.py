@@ -19,6 +19,7 @@ _ROLE_KINDS = {
     SessionRole.BROKER: ResourceKind.BROKER_CONTAINER,
     SessionRole.PROXY: ResourceKind.PROXY_CONTAINER,
     SessionRole.ROUTED_INIT: ResourceKind.GATEWAY_INIT_CONTAINER,
+    SessionRole.NETWORK_OBSERVER: ResourceKind.NETWORK_OBSERVER_CONTAINER,
     SessionRole.ROUTED_GATEWAY: ResourceKind.GATEWAY_CONTAINER,
 }
 

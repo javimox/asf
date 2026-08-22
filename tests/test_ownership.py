@@ -24,6 +24,7 @@ class TeardownOrderTests(unittest.TestCase):
                 ResourceKind.SECRET,
                 ResourceKind.BROKER_STATE,
                 ResourceKind.PROXY_CONTAINER,
+                ResourceKind.NETWORK_OBSERVER_CONTAINER,
                 ResourceKind.GATEWAY_INIT_CONTAINER,
                 ResourceKind.GATEWAY_CONTAINER,
                 ResourceKind.NETWORK,

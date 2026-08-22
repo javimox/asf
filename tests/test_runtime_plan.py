@@ -7,13 +7,14 @@ import sys
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError, replace
-from ipaddress import IPv4Network
+from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from asf.manifest import load_model  # noqa: E402
+from asf.models import RoutedRule, RoutedVerification  # noqa: E402
 from asf.ownership import ResourceKind  # noqa: E402
 from asf.paths import PathEscapeError, RepoPaths  # noqa: E402
 from asf.runtime_plan import (  # noqa: E402
@@ -24,6 +25,7 @@ from asf.runtime_plan import (  # noqa: E402
     build_runtime_plan,
     load_runtime_plan,
     read_runtime_plan,
+    routed_broker_address,
     runtime_plan_path,
     validate_runtime_plan_context,
     write_runtime_plan,
@@ -82,6 +84,35 @@ class RuntimePlanTests(unittest.TestCase):
         self.assertEqual(len(plan.runtime_container.attachments), 1)
         self.assertTrue(plan.networks[0].internal)
 
+    def test_routed_krun_broker_gets_one_fixed_scan_endpoint(self) -> None:
+        hermes = load_model(ROOT / "agents" / "hermes" / "runtime.yml")
+        routed = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
+        manifest = replace(
+            hermes,
+            runtime=replace(hermes.runtime, isolation="microvm"),
+            network=routed.network,
+            capabilities=frozenset({"net_raw"}),
+        )
+        plan = build_runtime_plan(
+            manifest,
+            paths=self.paths,
+            owner_pid=4242,
+            broker_globally_enabled=True,
+            routed_subnets=ROUTED,
+        )
+        broker = plan.container(SessionRole.BROKER)
+        self.assertIsNotNone(broker)
+        assert broker is not None
+        scan = plan.network(NetworkRole.SCAN)
+        self.assertIsNotNone(scan)
+        assert scan is not None
+        scan_attachment = next(
+            item for item in broker.attachments if item.network == scan.name
+        )
+        self.assertEqual(str(scan_attachment.address), "10.77.11.3")
+        self.assertEqual(str(routed_broker_address(plan)), "10.77.11.3")
+        self.assertEqual(len(broker.attachments), 3)
+
     def test_global_broker_switch_removes_broker_and_provider_network(self) -> None:
         plan = self.plan("claude", broker=False)
         self.assertFalse(plan.broker_enabled)
@@ -127,6 +158,55 @@ class RuntimePlanTests(unittest.TestCase):
         self.assertIn(
             ResourceKind.SUBNET_RESERVATION,
             [item.kind for item in plan.ephemeral_resources],
+        )
+
+    def test_routed_krun_plan_records_gateway_resources_for_cleanup(self) -> None:
+        manifest = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
+        plan = build_runtime_plan(
+            manifest,
+            paths=self.paths,
+            owner_pid=4242,
+            broker_globally_enabled=False,
+            routed_subnets=ROUTED,
+        )
+
+        self.assertEqual(plan.runtime_isolation, "microvm")
+        self.assertEqual(
+            [container.role for container in plan.support_containers],
+            [SessionRole.ROUTED_GATEWAY, SessionRole.ROUTED_INIT],
+        )
+        kinds = {resource.kind for resource in plan.ephemeral_resources}
+        self.assertIn(ResourceKind.RUNTIME_CONTAINER, kinds)
+        self.assertIn(ResourceKind.GATEWAY_INIT_CONTAINER, kinds)
+        self.assertIn(ResourceKind.GATEWAY_CONTAINER, kinds)
+        self.assertIn(ResourceKind.SUBNET_RESERVATION, kinds)
+
+    def test_routed_plan_routes_separate_negative_control_to_gateway(self) -> None:
+        manifest = load_model(
+            ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml"
+        )
+        network = replace(
+            manifest.network,
+            routed_rules=(RoutedRule(IPv4Network("192.0.2.20/32")),),
+            routed_verification=RoutedVerification(
+                address=IPv4Address("192.0.2.20"),
+                protocol="tcp",
+                allowed_port=18080,
+                blocked_address=IPv4Address("198.51.100.20"),
+                blocked_port=18080,
+            ),
+        )
+        plan = build_runtime_plan(
+            replace(manifest, network=network),
+            paths=self.paths,
+            owner_pid=4242,
+            broker_globally_enabled=False,
+            routed_subnets=ROUTED,
+        )
+        scan = next(item for item in plan.networks if item.role is NetworkRole.SCAN)
+        self.assertEqual(
+            [str(route.destination) for route in scan.routes],
+            ["192.0.2.20/32", "198.51.100.20/32"],
         )
 
     def test_routed_allocation_is_explicit_and_mode_scoped(self) -> None:

@@ -18,8 +18,10 @@ building it.
 
 ## Quick start
 
-**Requirements:** Python with PyYAML, rootless Podman, and the Dev Container CLI
-(`@devcontainers/cli`). See
+**Requirements:** Python with PyYAML and rootless Podman. The default container
+backend also uses the Dev Container CLI (`@devcontainers/cli`). Optional
+[microVM isolation](docs/KRUN.md) replaces that dependency and is currently
+implemented with krun/libkrun/KVM. See
 [Getting started](docs/GETTING-STARTED.md#prerequisites) for installation details.
 
 ASF runtimes are configured per agent. In general:
@@ -79,6 +81,10 @@ agent should not modify.
   outside the agent runtime and expose only a short-lived local token.
 - **Owned teardown and evidence.** ASF tracks the resources it creates, removes
   ephemeral state on exit, and records verification and cleanup evidence.
+- **Optional microVM isolation.** A runtime can place only the untrusted
+  agent workload behind a libkrun/KVM guest-kernel boundary while ASF keeps its
+  existing rootless Podman support services and policy orchestration
+  ([docs/KRUN.md](docs/KRUN.md)).
 
 ## Supported runtimes
 
@@ -113,6 +119,8 @@ The full documentation is organized under [docs/](docs/README.md):
 - [Network design](docs/NETWORK-DESIGN.md)
 - [Egress design](docs/EGRESS-DESIGN.md)
 - [Dev Container integration](docs/DEVCONTAINER.md)
+- [krun microVM isolation](docs/KRUN.md)
+- [observability](docs/OBSERVABILITY.md)
 - [Dependencies and SBOM scope](docs/DEPENDENCIES.md)
 - [Testing](docs/TESTING.md)
 - [Releasing](docs/RELEASING.md)

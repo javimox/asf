@@ -11,12 +11,14 @@ dependencies that the operator controls.
 | PyYAML | `>=6,<7` | major range | runtime manifests |
 | setuptools | `>=77` when building a wheel | build range | package metadata/build backend |
 | Podman | rootless, Netavark backend | host-managed | containers, networks, secrets, volumes |
-| Dev Container CLI | compatible current release | host-managed | build/up/exec boundary |
+| Dev Container CLI | compatible current release | host-managed | default `container` backend build/up/exec boundary |
+| krun + libkrun + KVM | optional | host-managed | `runtime.isolation: microvm` microVM boundary |
 | Bash | `>=4` for test harnesses | host-managed | tests and small fixed scripts |
 | ShellCheck | optional | host-managed | shell static analysis |
 
-Podman and Dev Container CLI versions are intentionally not downloaded or
-upgraded by ASF. Record the versions used for a release validation with:
+Podman, Dev Container CLI, krun and libkrun are intentionally not downloaded or
+upgraded by ASF. Record the versions relevant to the backend used for release
+validation with:
 
 ```bash
 python3 --version
@@ -24,6 +26,7 @@ python3 -c 'import yaml; print(yaml.__version__)'
 podman --version
 podman info --format '{{.Host.NetworkBackend}}'
 devcontainer --version
+krun --version                 # when validating krun isolation
 ```
 
 ## Pinned runtime/build inputs

@@ -69,6 +69,8 @@ class LiteLLMEntrypointTests(unittest.TestCase):
             self.assertNotIn("allowed_routes", config)
             self.assertIn("master_key:", config)
             self.assertIn("disable_spend_logs: true", config)
+            self.assertIn("litellm_observer.proxy_handler_instance", config)
+            self.assertIn("turn_off_message_logging: true", config)
 
     def test_provider_key_is_read_from_mounted_secret_file(self) -> None:
         import os, tempfile

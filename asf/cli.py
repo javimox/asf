@@ -10,6 +10,7 @@ from typing import NoReturn, TextIO
 from .diagnostics import DiagnosticResult, run_diagnostic_command
 from .egress_evidence import run_advise_command
 from .errors import AsfError
+from .observability import run_observe_command
 from .maintenance import run_maintenance_command
 from .paths import RepoPaths
 from .podman import PodmanClient, PodmanUnavailableError
@@ -29,14 +30,14 @@ from .version import __version__
 __all__ = ["main"]
 
 _REPOSITORY_COMMANDS = frozenset({"repo", "repository"})
-_SESSION_COMMANDS = frozenset({"ls"})
+_SESSION_COMMANDS = frozenset({"ls", "observe"})
 _DIAGNOSTIC_COMMANDS = frozenset({"proxy", "broker"})
 _LIFECYCLE_COMMANDS = frozenset({"stop", "reset", "open", "shell"})
 _EVIDENCE_COMMANDS = frozenset({"advise"})
 _MAINTENANCE_COMMANDS = frozenset({"build", "scan"})
 _USAGE = (
     "Usage: python3 -m asf "
-    "{open|shell|ls|repo|repository|build|scan|proxy|broker|test|advise|stop|reset} "
+    "{open|shell|ls|observe|repo|repository|build|scan|proxy|broker|test|advise|stop|reset} "
     "[argument]\n"
 )
 _PODMAN_NOT_FOUND = (
@@ -52,8 +53,9 @@ ReplaceProcess = Callable[[Sequence[str]], NoReturn]
 
 _HELP = """
   ./sandbox.sh open <agent>        start a sandbox session
-  ./sandbox.sh shell [agent]       attach to a running agent container
+  ./sandbox.sh shell [agent]       attach to a running agent session
   ./sandbox.sh ls                  show running and deployed agent sessions
+  ./sandbox.sh observe [agent]     show host-side session and privilege state
   ./sandbox.sh stop [agent]        stop one session, or all of them
   ./sandbox.sh broker status [agent]        LiteLLM status and exposed models
   ./sandbox.sh broker logs [-f] [agent]     show or follow LiteLLM logs
@@ -130,8 +132,12 @@ def main(
         paths = RepoPaths.discover() if root is None else RepoPaths.for_root(root)
         if arguments[0] in _REPOSITORY_COMMANDS:
             result = _run_repository(arguments, paths)
-        elif arguments[0] in _SESSION_COMMANDS:
+        elif arguments[0] == "ls":
             result = _run_session_list(arguments, paths, podman)
+        elif arguments[0] == "observe":
+            result = run_observe_command(
+                arguments, paths, podman=podman, require_available=True
+            )
         elif arguments[0] in _DIAGNOSTIC_COMMANDS:
             result = run_diagnostic_command(
                 arguments,

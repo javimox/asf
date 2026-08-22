@@ -9,6 +9,7 @@ adapter: hermes
 
 runtime:
   mode: interactive
+  isolation: container  # container or microvm
 
 filesystem:
   state:
@@ -22,18 +23,44 @@ llm:
   # api_key_env defaults to OPENAI_API_KEY; direct_domain to api.openai.com
   # models omitted => wildcard route
 
-# network.allow_domains is the COMPLETE allowlist for this runtime.
-# There is no implicit base list: what is not here cannot be reached.
-# Add git hosts only if this runtime pushes from inside the container; the
-# default workflow (commit inside, push from the host) does not need them.
+# Optional runtime capabilities (default: none).
+# NET_RAW is the only supported capability. With microVM isolation it requires routed mode.
+# Uncomment only when the workload needs raw sockets (for example SYN scans).
+# capabilities: [net_raw]
+
+observability:
+  # true stores full broker-visible prompts on the host (0600).
+  llm_prompts: false
+  # routed+microvm only; records TCP SYN, UDP and ICMP echo attempts, no payloads.
+  network_activity: false
+
+# Network policy is agent-agnostic: choose one mode and keep only that mode's
+# fields active. Proxy is the usual default for interactive agents.
 network:
+  # proxy -> domain allowlist through Caddy
   mode: proxy
-  # Positive control for startup verification: must be in the list below.
   verify_domain: github.com
   allow_domains:
     - github.com
     - objects.githubusercontent.com
     - raw.githubusercontent.com
+
+  # routed -> explicit destination CIDRs; optional protocol/port restrictions
+  # mode: routed
+  # allow:
+  #   - cidr: 192.0.2.10/32       # destination only = all IP traffic
+  #   # - cidr: 198.51.100.20/32
+  #   #   protocol: tcp
+  #   #   ports: [22, 443]
+  # Optional controlled live policy proof:
+  # verify:
+  #   address: 192.0.2.10
+  #   protocol: tcp
+  #   port: 22
+  #   blocked_port: 19999
+
+  # isolated -> no direct external destination fields
+  # mode: isolated
 
 secrets:
   files:

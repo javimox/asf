@@ -233,37 +233,83 @@ disable it again after diagnosis.
 
 ## Runtime manifests
 
-Each runtime is declared by `agents/<name>/runtime.yml` — its identity, state
-volumes, LLM/broker settings, secrets, and static environment. ASF discovers
-runtimes by that file, so adding one needs no code change:
+Most ASF policy options are **agent-agnostic**. The adapter chooses what is
+installed/configured; it does not lock the runtime to one network or isolation
+mode. Hermes, Claude, and generic Python workloads can use the same ASF policy
+knobs when the combination is supported.
+
+| Setting | Options / constraint |
+|---|---|
+| `runtime.isolation` | `container` or `microvm` |
+| `network.mode` | `proxy`, `routed`, or `isolated` |
+| `capabilities` | optional; `net_raw` only. With `microvm`, requires `routed` |
+| `observability.llm_prompts` | requires `llm.broker: true` |
+| `observability.network_activity` | requires `microvm` + `routed` |
+| proxy fields | `verify_domain`, `allow_domains` |
+| routed fields | `allow`, optional `verify` |
+
+A normal interactive agent defaults to `container` + `proxy`. Keep only the
+selected network mode's fields active:
 
 ```yaml
-name: my-app
+name: my-agent
 adapter: generic
+
 runtime:
-  mode: service
-  command: ["python", "-m", "my_app"]
+  mode: interactive
+  isolation: container  # container or microvm
+
+# Optional. NET_RAW is the only supported runtime capability.
+# capabilities: [net_raw]
+
 llm:
   broker: true
-  protocol: openai        # wire protocol spoken TO the broker
-  provider: openrouter    # upstream provider LiteLLM talks to
-filesystem:
-  state:
-    - key: cache
-      target: /home/node/.cache/my-app
-secrets:
-  files: [common.env]
+  protocol: openai
+  provider: openai
+
+observability:
+  llm_prompts: false      # requires broker; stores full prompts on host
+  network_activity: false # requires microvm+routed; no packet payloads
+
+network:
+  # proxy (usual default)
+  mode: proxy
+  verify_domain: github.com
+  allow_domains:
+    - github.com
+
+  # routed (replace the proxy fields above)
+  # mode: routed
+  # allow:
+  #   - cidr: 192.0.2.10/32
+  #     # protocol: tcp
+  #     # ports: [22, 443]
+  # verify:                     # optional live policy proof
+  #   address: 192.0.2.10
+  #   protocol: tcp
+  #   port: 22
+  #   blocked_port: 19999
+
+  # isolated (replace all external destination fields)
+  # mode: isolated
 ```
+
 
 Validate one with `python3 -m asf.manifest agents/<name>/runtime.yml`.
 Unknown keys are rejected, so a typo fails loudly instead of silently doing
 nothing. Manifests currently declare only what ASF reads from them; repository
 mounts stay in `agents/<name>/repos.yml` and hardening in `asf.conf`. Extra
-egress domains for a runtime go in its manifest under
-`network.allow_domains`.
+Network fields are mode-specific: `proxy` uses `verify_domain` and
+`allow_domains`; `routed` uses `allow` and optional `verify`; `isolated` uses
+none of those destination fields.
 
 Requires PyYAML on the host (`pacman -S python-yaml`, `apt install python3-yaml`,
 or `pip install pyyaml`).
+
+`runtime.isolation` is optional. `container` is the default and preserves the
+existing Dev Container lifecycle. `krun` runs only the agent workload behind a
+libkrun/KVM boundary and has deliberate runtime constraints; see
+[krun microVM isolation](KRUN.md).
 ### LangGraph, CrewAI, smolagents, or your own Python agent
 
 ASF sandboxes these as **one workload** — there is no CrewAI adapter and no
@@ -368,6 +414,7 @@ than one is running:
 
 ```bash
 ./sandbox.sh ls                  # show active/deployed sessions
+./sandbox.sh observe [agent]     # host-side session and privilege state
 ./sandbox.sh shell hermes        # attach
 ./sandbox.sh broker status claude
 ./sandbox.sh scan my-api hermes

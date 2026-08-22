@@ -145,6 +145,7 @@ class SessionRole(str, Enum):
     BROKER = "broker"
     ROUTED_GATEWAY = "routed-gateway"
     ROUTED_INIT = "routed-init"
+    NETWORK_OBSERVER = "network-observer"
 
     @classmethod
     def parse(cls, value: str) -> "SessionRole | None":
@@ -159,6 +160,7 @@ _SUPPORT_ROLES = (
     SessionRole.PROXY,
     SessionRole.ROUTED_GATEWAY,
     SessionRole.ROUTED_INIT,
+    SessionRole.NETWORK_OBSERVER,
 )
 
 

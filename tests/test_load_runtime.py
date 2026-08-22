@@ -168,10 +168,16 @@ class NetworkModeTests(unittest.TestCase):
                 "mode": "proxy", "allow": [
                     {"cidr": "10.0.0.1/32", "protocol": "icmp_echo"}]}})
 
-    def test_proxy_and_routed_cannot_combine(self) -> None:
+    def test_proxy_only_fields_have_clear_routed_error(self) -> None:
+        manifest = self.routed(allow_domains=["pypi.org"])
+        manifest["network"]["verify_domain"] = "pypi.org"
         with self.assertRaises(ManifestError) as ctx:
-            load_runtime.validate(self.routed(allow_domains=["pypi.org"]))
-        self.assertIn("cannot use proxy and routed together", str(ctx.exception))
+            load_runtime.validate(manifest)
+        message = str(ctx.exception)
+        self.assertIn("network.allow_domains", message)
+        self.assertIn("network.verify_domain", message)
+        self.assertIn("only valid with mode: proxy", message)
+        self.assertIn("remove these fields when using mode: routed", message)
 
     def test_proxy_external_allowlist_requires_explicit_positive_control(self) -> None:
         with self.assertRaises(ManifestError) as ctx:

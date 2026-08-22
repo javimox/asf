@@ -27,6 +27,7 @@ class FakePodmanRunner:
         mode: str,
         *,
         broker: bool,
+        isolation: str = "container",
         stale: bool = False,
         infrastructure_failure: bool = False,
         gateway_inspect_failure: bool = False,
@@ -35,6 +36,7 @@ class FakePodmanRunner:
         self.runtime = runtime
         self.mode = mode
         self.broker = broker
+        self.isolation = isolation
         self.stale = stale
         self.infrastructure_failure = infrastructure_failure
         self.gateway_inspect_failure = gateway_inspect_failure
@@ -50,8 +52,11 @@ class FakePodmanRunner:
             )
         }
         if broker:
+            broker_networks = [names.internal, names.provider]
+            if mode == "routed" and isolation == "microvm":
+                broker_networks.append(names.scan)
             self.containers["broker-id"] = self._container(
-                "broker-id", "broker", "broker", (names.internal, names.provider)
+                "broker-id", "broker", "broker", tuple(broker_networks)
             )
         if mode == "proxy":
             self.containers["proxy-id"] = self._container(
@@ -144,6 +149,19 @@ class FakePodmanRunner:
             reference = args[offset]
             command = args[offset + 1 :]
             return self._exec(args, reference, command, input_text)
+        if args[1] == "run":
+            rendered = " ".join(args)
+            if " nc " in f" {rendered} " and "broker-id" in args:
+                return CommandResult(args, 0, "", "")
+            if "route show default" in rendered:
+                return CommandResult(args, 22, "", "")
+            if " route get " in rendered:
+                return CommandResult(
+                    args,
+                    2,
+                    "",
+                    "RTNETLINK: Network is unreachable",
+                )
         raise AssertionError(f"unexpected Podman command: {args}")
 
     def _exec(
@@ -212,6 +230,7 @@ class SecurityCommandTests(unittest.TestCase):
         stale: bool = False,
         infrastructure_failure: bool = False,
         gateway_inspect_failure: bool = False,
+        isolation: str = "container",
         event_sink=None,
     ):
         temporary = tempfile.TemporaryDirectory()
@@ -253,8 +272,14 @@ class SecurityCommandTests(unittest.TestCase):
                         "    blocked_port: 19999",
                     )
                 )
+            runtime = (
+                ""
+                if isolation == "container"
+                else f"runtime:\n  isolation: {isolation}\n"
+            )
             manifest = (
                 "name: claude\nadapter: claude\n"
+                + runtime
                 + llm
                 + "\n".join(network)
                 + "\nsecrets:\n  files: [claude.env]\n"
@@ -269,6 +294,7 @@ class SecurityCommandTests(unittest.TestCase):
                 "claude",
                 mode,
                 broker=broker,
+                isolation=isolation,
                 stale=stale,
                 infrastructure_failure=infrastructure_failure,
                 gateway_inspect_failure=gateway_inspect_failure,
@@ -321,6 +347,48 @@ class SecurityCommandTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0)
                 self.assertIn("external DNS is unavailable", output)
                 self.assertEqual("LiteLLM broker is running" in output, broker)
+
+    def test_microvm_report_is_partial_and_not_a_success_status(self) -> None:
+        temporary, result = self.make_checkout(
+            "isolated",
+            broker=False,
+            isolation="microvm",
+        )
+        self.addCleanup(temporary.cleanup)
+        output = self.combined(result)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Security test partial:", output)
+        self.assertIn("runtime network probe has no IPv4 default route", output)
+        self.assertNotIn("Security test passed:", output)
+
+    def test_routed_microvm_report_is_partial_not_infrastructure_failure(self) -> None:
+        temporary, result = self.make_checkout(
+            "routed",
+            broker=False,
+            isolation="microvm",
+        )
+        self.addCleanup(temporary.cleanup)
+        output = self.combined(result)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Security test partial:", output)
+        self.assertIn("routed microVM guest connectivity", output)
+        self.assertNotIn("no executor supports RuntimeSecurityProbe", output)
+        self.assertNotIn("Security test failed:", output)
+
+    def test_routed_microvm_broker_uses_planned_scan_network(self) -> None:
+        temporary, result = self.make_checkout(
+            "routed",
+            broker=True,
+            isolation="microvm",
+        )
+        self.addCleanup(temporary.cleanup)
+        output = self.combined(result)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "LiteLLM is attached only to internal, provider, and scan networks",
+            output,
+        )
+        self.assertNotIn("Security test failed:", output)
 
     def test_routed_report(self) -> None:
         temporary, result = self.make_checkout("routed", broker=False)

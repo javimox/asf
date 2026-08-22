@@ -63,7 +63,16 @@ Start a runtime in one terminal, then test it from another:
 
 The test checks the runtime's network attachments, `NET_ADMIN`,
 `no-new-privileges`, forwarding, host-secret masking, read-only framework mount,
-Podman-socket absence, and the policy for its selected network mode.
+Podman-socket absence, and the policy for its selected network mode. For proxy
+mode this is also where ASF runs the exhaustive Caddy deny matrix (undeclared,
+loopback, private IPv4/IPv6, link-local, and metadata destinations); normal
+startup runs only the smaller critical-path subset.
+
+For `runtime.isolation: microvm`, ASF cannot start a diagnostic process inside the
+already-running guest. `./sandbox.sh test <agent>` therefore runs the host-side,
+support-container and network checks it can prove, reports the result as
+**partial**, and exits with status `2`. Status `0` is reserved for a complete
+security-test pass.
 
 ## Caddy observability
 
@@ -96,18 +105,19 @@ sessions. Advice never modifies a manifest.
 
 ## Routed-mode verification
 
-Routed mode needs a target with two known-open TCP ports: one declared as
-allowed and one deliberately omitted from policy. This distinguishes firewall
-enforcement from a closed service.
+Normal routed sessions do not need target-side test listeners. ASF always
+checks routes, no IPv4/IPv6 default route, no undeclared route, and no external
+DNS path.
 
-On the target host:
+For controlled acceptance tests, add optional `network.verify`. Use two
+known-open TCP endpoints so ASF can prove one allow and one policy denial.
 
 ```bash
 python3 tests/helpers/routed_test_target.py --allowed-port 18080 --blocked-port 19999
 ```
 
-Copy `agents/routed-scanner/example-runtime-ci-tested.yml` to `agents/<name>/runtime.yml`, adjust the
-address/CIDR, then run:
+Use `agents/routed-scanner/example-runtime-ci-tested.yml` as the live-verification
+example. Adjust the addresses/ports, then run:
 
 ```bash
 ./sandbox.sh open <name>
@@ -127,11 +137,43 @@ ASF_ROUTED_BLOCKED_PORT=19999 \
 bash tests/test_routed_integration.sh
 ```
 
-The routed lifecycle allocates collision-free internal, scan, and egress
-subnets, creates a scan network with only declared routes, starts a
-capability-less gateway, loads nftables
-through a short-lived `NET_ADMIN` initializer, verifies allow and deny paths,
-and only then starts the runtime.
+## krun validation
+
+Keep the automated krun integration surface deliberately small. These tests
+cover security properties that are difficult to infer from source-level tests
+and useful to catch as regressions on a real KVM host:
+
+```bash
+# Guest hardening + isolated topology + repository ownership
+ASF_KRUN_INTEGRATION=1 bash tests/test_krun_integration.sh
+
+# Caddy allowlist path + direct-bypass denial
+ASF_KRUN_PROXY_INTEGRATION=1 bash tests/test_krun_proxy_integration.sh
+```
+
+The base test covers the post-drop UID/GID 1000, zero capability sets,
+`NoNewPrivs=1`, secret masking, isolated direct-egress denial, and repository
+UID/GID ownership. The proxy test covers allowlisted HTTPS through Caddy,
+direct proxy-bypass denial, non-allowlisted HTTPS denial, and retained Caddy
+evidence for the allow and deny requests.
+
+For krun development, feature-progress checks such as starting Hermes,
+reaching LiteLLM/OpenAI, attach/detach behavior, and routed-mode experiments are
+manual acceptance tests unless they uncover a stable regression that cannot be
+covered cheaply at unit level. Avoid adding one permanent integration script
+per feature combination. Before a krun release, review the live tests and
+remove any whose original uncertainty is already covered by simpler tests or by
+stable product behavior.
+
+Temporary krun broker/Hermes integration scripts used during early validation
+were intentionally removed after the private broker path and real Hermes flow
+were proven manually. Existing broker/proxy/unit coverage remains responsible
+for those components outside the microVM-specific security boundary.
+
+The routed lifecycle allocates its subnets, starts a capability-less gateway,
+loads nftables through a short-lived `NET_ADMIN` initializer, verifies structural
+routing invariants, then starts the runtime. Optional `network.verify` adds live
+allow/deny controls.
 
 ## Lower-level routed tests
 
@@ -150,9 +192,12 @@ headers.
 
 ### Routed verification scope
 
-Startup proves one allowed and one known-open blocked TCP path. UDP and ICMP
-rules are generated and covered by unit/spike tests, but are not positively
-exercised on every session. Routed mode is IPv4-only.
+Every routed startup verifies structural invariants: declared routes, no IPv4 or
+IPv6 default route, no undeclared route, and no external DNS path. If the
+manifest includes optional `network.verify`, startup additionally proves one
+known-reachable allowed TCP path and one known-open blocked TCP path. UDP and
+ICMP rules are generated and covered by unit/spike/manual tests, but are not
+positively exercised on every session. Routed mode is IPv4-only.
 
 ## Diagnostic tools (real host, read-mostly)
 
@@ -177,9 +222,14 @@ bash tests/experiments/spike-current-caddy-responses.sh
 bash tests/spike-caddy-private-resolution.sh
 ```
 
-For a *running* session, prefer the built-in commands first:
-`./sandbox.sh proxy status|config|logs`, `./sandbox.sh broker status|logs`,
-and `./sandbox.sh test <agent>` for the on-demand security-boundary suite.
+For a running session, prefer the built-in commands:
+
+```bash
+./sandbox.sh observe [agent]
+./sandbox.sh proxy status|config|logs [agent]
+./sandbox.sh broker status|logs [agent]
+./sandbox.sh test <agent>
+```
 Each session also persists its evidence records under
 `.devcontainer/sessions/<agent>/`: `runtime-plan.json`,
 `verification-report.json`, `cleanup-report.json`, and for proxy mode

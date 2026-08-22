@@ -25,9 +25,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Callable, Mapping, Sequence, TextIO
 
+from .broker_metadata import prepare_broker_prompt_log, prepare_broker_request_log
 from .errors import ConfigurationError, InfrastructureError, ValidationError
 from .manifest import load_model
 from .models import LlmSettings, RuntimeManifest
+from .observation_sessions import current_observation_session, observation_artifact
 from .ownership import ResourceKind
 from .paths import RepoPaths
 from .podman import ContainerState, PodmanClient
@@ -288,6 +290,46 @@ class BrokerRequest:
             raise BrokerError(f"LiteLLM entrypoint is missing or unsafe: {path}")
         return path
 
+    @property
+    def observer(self) -> Path:
+        lexical = self.paths.litellm_observer
+        if lexical.is_symlink():
+            raise BrokerError(f"LiteLLM observer must not be a symlink: {lexical}")
+        try:
+            path = self.paths.child("tools", "litellm_observer.py")
+        except ValidationError as exc:
+            raise BrokerError("LiteLLM observer escaped tools/") from exc
+        if not path.is_file():
+            raise BrokerError(f"LiteLLM observer is missing or unsafe: {path}")
+        return path
+
+    @property
+    def request_log_path(self) -> Path:
+        session = current_observation_session(self.paths, self.plan.runtime)
+        if session is None:
+            return self.paths.session_artifact(
+                self.plan.runtime, "broker-requests.jsonl"
+            )
+        return observation_artifact(
+            self.paths, self.plan.runtime, "broker-requests.jsonl"
+        )
+
+    @property
+    def prompt_log_path(self) -> Path:
+        session = current_observation_session(self.paths, self.plan.runtime)
+        if session is None:
+            return self.paths.session_artifact(
+                self.plan.runtime, "llm-prompts.jsonl"
+            )
+        return observation_artifact(
+            self.paths, self.plan.runtime, "llm-prompts.jsonl"
+        )
+
+    @property
+    def observation_session_id(self) -> str:
+        session = current_observation_session(self.paths, self.plan.runtime)
+        return "" if session is None else session.session_id
+
 
 @dataclass(frozen=True, slots=True)
 class BrokerService:
@@ -319,6 +361,7 @@ class BrokerService:
             raise TypeError("request must be a BrokerRequest")
         _validate_session_token(token)
         self.podman.require_available()
+        started = time.monotonic()
         _clear_state(request.state_path)
 
         provider_key = read_declared_secret(request, request.api_key_name, error=error)
@@ -331,6 +374,10 @@ class BrokerService:
                 f"  Provider: {request.provider}\n"
                 f"  Add it to one of the runtime's declared secret files:{suffix}"
             )
+
+        prepare_broker_request_log(request.paths, request.plan.runtime)
+        if request.manifest.observability.llm_prompts:
+            prepare_broker_prompt_log(request.paths, request.plan.runtime)
 
         output.write("\033[0;34mPreparing LiteLLM broker...\033[0m\n")
         image_exists = self.podman.observe(
@@ -384,7 +431,7 @@ class BrokerService:
         output.write(
             f"  \033[0;32m✓\033[0m Broker container started "
             f"\033[2m(agent: {request.plan.runtime}, models: "
-            f"{request.models.route})\033[0m\n"
+            f"{request.models.route}; {time.monotonic() - started:.1f}s)\033[0m\n"
         )
 
     def wait_ready(
@@ -397,6 +444,8 @@ class BrokerService:
         if not isinstance(request, BrokerRequest):
             raise TypeError("request must be a BrokerRequest")
         self.podman.require_available()
+        started = time.monotonic()
+        output.write("  \033[2m→ Waiting for LiteLLM broker readiness\033[0m\n")
         attempts = request.settings.startup_timeout * 2
         for attempt in range(attempts):
             result = self.podman.exec_container(
@@ -406,7 +455,10 @@ class BrokerService:
                 timeout=5,
             )
             if result.returncode == 0:
-                output.write("  \033[0;32m✓ LiteLLM broker ready\033[0m\n")
+                output.write(
+                    "  \033[0;32m✓ LiteLLM broker ready\033[0m "
+                    f"\033[2m({time.monotonic() - started:.1f}s)\033[0m\n"
+                )
                 return
             if result.returncode in {125, 126, 127}:
                 raise BrokerLifecycleError(
@@ -461,66 +513,102 @@ class BrokerService:
         if not isinstance(request, BrokerRequest):
             raise TypeError("request must be a BrokerRequest")
         _validate_session_token(token)
-        return (
+        argv: list[str | SensitiveArgument] = [
             str(self.podman.engine),
             "run",
             "-d",
             "--name",
             request.container.name,
-            "--network",
-            f"{request.internal_network}:alias={BROKER_INTERNAL_ALIAS}",
-            "--network",
-            request.provider_network,
-            "--label",
-            request.plan.sandbox_label,
-            "--label",
-            "asf.role=broker",
-            "--label",
-            f"asf.agent={request.plan.runtime}",
-            "--label",
-            f"asf.provider={request.provider}",
-            "--label",
-            f"asf.model-mode={request.models.mode}",
-            "--label",
-            f"asf.model-route={request.models.route}",
-            "--label",
-            f"asf.default-model={request.models.default_model}",
-            "--read-only",
-            "--tmpfs",
-            "/tmp:rw,nosuid,nodev,size=64m",
-            "--tmpfs",
-            "/run/secrets:rw,nosuid,nodev,noexec,size=1m,mode=0755",
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--pids-limit=256",
-            "--memory=768m",
-            "--cpus=1",
-            "--secret",
-            f"{request.secret_name},type=mount,target=provider_api_key",
-            "-e",
-            SensitiveArgument(f"LITELLM_MASTER_KEY={token.reveal()}"),
-            "-e",
-            f"LITELLM_AGENT={request.plan.runtime}",
-            "-e",
-            f"ASF_LITELLM_PROVIDER={request.provider}",
-            "-e",
-            f"ASF_LITELLM_MODELS={request.models.model_text}",
-            "-e",
-            "ASF_LITELLM_DETAILED_DEBUG="
-            f"{'true' if request.settings.detailed_debug else 'false'}",
-            "-e",
-            "NO_DOCS=True",
-            "-e",
-            "NO_REDOC=True",
-            "-e",
-            "DISABLE_ADMIN_UI=True",
-            "-v",
-            f"{request.entrypoint}:/asf/litellm_entrypoint.py:ro",
-            "--entrypoint",
-            "python",
-            request.settings.image,
-            "/asf/litellm_entrypoint.py",
+        ]
+        for attachment in request.container.attachments:
+            options: list[str] = []
+            if attachment.network == request.internal_network:
+                options.append(f"alias={BROKER_INTERNAL_ALIAS}")
+            if attachment.address is not None:
+                options.append(f"ip={attachment.address}")
+            network = attachment.network
+            if options:
+                network += ":" + ",".join(options)
+            argv.extend(("--network", network))
+        argv.extend(
+            (
+                "--label",
+                request.plan.sandbox_label,
+                "--label",
+                "asf.role=broker",
+                "--label",
+                f"asf.agent={request.plan.runtime}",
+                "--label",
+                f"asf.provider={request.provider}",
+                "--label",
+                f"asf.model-mode={request.models.mode}",
+                "--label",
+                f"asf.model-route={request.models.route}",
+                "--label",
+                f"asf.default-model={request.models.default_model}",
+                "--read-only",
+                "--tmpfs",
+                "/tmp:rw,nosuid,nodev,size=64m",
+                "--tmpfs",
+                "/run/secrets:rw,nosuid,nodev,noexec,size=1m,mode=0755",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--pids-limit=256",
+                "--memory=1g",
+                "--cpus=1",
+                "--secret",
+                f"{request.secret_name},type=mount,target=provider_api_key",
+                "-e",
+                SensitiveArgument(f"LITELLM_MASTER_KEY={token.reveal()}"),
+                "-e",
+                f"LITELLM_AGENT={request.plan.runtime}",
+                "-e",
+                f"ASF_OBSERVATION_SESSION_ID={request.observation_session_id}",
+                "-e",
+                f"ASF_LITELLM_PROVIDER={request.provider}",
+                "-e",
+                f"ASF_LITELLM_MODELS={request.models.model_text}",
+                "-e",
+                "ASF_LITELLM_DETAILED_DEBUG="
+                f"{'true' if request.settings.detailed_debug else 'false'}",
+                "-e",
+                "NO_DOCS=True",
+                "-e",
+                "NO_REDOC=True",
+                "-e",
+                "DISABLE_ADMIN_UI=True",
+                "-e",
+                "ASF_BROKER_REQUEST_LOG=/tmp/asf-broker-requests.jsonl",
+                "-e",
+                "ASF_LLM_PROMPTS="
+                f"{'true' if request.manifest.observability.llm_prompts else 'false'}",
+                "-v",
+                f"{request.request_log_path}:/tmp/asf-broker-requests.jsonl:rw",
+            )
         )
+        if request.manifest.observability.llm_prompts:
+            argv.extend(
+                (
+                    "-e",
+                    "ASF_LLM_PROMPT_LOG=/tmp/asf-llm-prompts.jsonl",
+                    "-v",
+                    f"{request.prompt_log_path}:/tmp/asf-llm-prompts.jsonl:rw",
+                )
+            )
+        argv.extend(
+            (
+                "-v",
+                # LiteLLM 1.93 resolves custom callback modules beside its config.
+                f"{request.observer}:/tmp/litellm_observer.py:ro",
+                "-v",
+                f"{request.entrypoint}:/asf/litellm_entrypoint.py:ro",
+                "--entrypoint",
+                "python",
+                request.settings.image,
+                "/asf/litellm_entrypoint.py",
+            )
+        )
+        return tuple(argv)
 
     @staticmethod
     def readiness_command() -> tuple[str, ...]:
@@ -711,10 +799,18 @@ def _validate_broker_context(request: BrokerRequest) -> None:
     broker = request.plan.container(SessionRole.BROKER)
     if broker is None:
         raise BrokerError("broker-enabled plan is missing the LiteLLM container")
-    expected_networks = (request.internal_network, request.provider_network)
-    if broker.networks != expected_networks:
+    expected_networks = [request.internal_network, request.provider_network]
+    if (
+        request.plan.network_mode == "routed"
+        and request.plan.runtime_isolation == "microvm"
+    ):
+        scan = request.plan.network(NetworkRole.SCAN)
+        if scan is None:
+            raise BrokerError("routed microVM broker plan is missing the scan network")
+        expected_networks.append(scan.name)
+    if broker.networks != tuple(expected_networks):
         raise BrokerError(
-            "LiteLLM must attach to the internal and provider networks in that order"
+            "LiteLLM attachments do not match the planned broker networks"
         )
     if broker.capabilities:
         raise BrokerError("LiteLLM must not receive Linux capabilities")

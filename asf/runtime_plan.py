@@ -51,6 +51,7 @@ __all__ = [
     "load_runtime_plan",
     "read_runtime_plan",
     "main",
+    "routed_broker_address",
     "runtime_plan_path",
     "validate_runtime_plan_context",
     "write_runtime_plan",
@@ -244,6 +245,7 @@ class RuntimePlan:
     owner_pid: int
     adapter: str
     runtime_mode: str
+    runtime_isolation: str
     network_mode: str
     command: tuple[str, ...]
     broker_enabled: bool
@@ -272,6 +274,10 @@ class RuntimePlan:
             raise ValidationError("runtime plan owner PID must be positive")
         if not isinstance(self.broker_enabled, bool):
             raise TypeError("broker_enabled must be boolean")
+        if self.runtime_isolation not in {"container", "microvm"}:
+            raise ValidationError(
+                f"unsupported runtime isolation: {self.runtime_isolation!r}"
+            )
         _validate_runtime_plan(self)
 
     @property
@@ -314,6 +320,7 @@ class RuntimePlan:
             "owner_pid": self.owner_pid,
             "adapter": self.adapter,
             "runtime_mode": self.runtime_mode,
+            "runtime_isolation": self.runtime_isolation,
             "network_mode": self.network_mode,
             "command": list(self.command),
             "broker_enabled": self.broker_enabled,
@@ -344,6 +351,27 @@ class RuntimePlan:
                 for item in self.ephemeral_resources
             ],
         }
+
+
+def routed_broker_address(plan: RuntimePlan) -> IPv4Address | None:
+    """Return the broker address reachable from a routed microVM TAP guest."""
+
+    if not (
+        plan.network_mode == "routed"
+        and plan.runtime_isolation == "microvm"
+        and plan.broker_enabled
+    ):
+        return None
+    scan = plan.network(NetworkRole.SCAN)
+    broker = plan.container(SessionRole.BROKER)
+    if scan is None or broker is None:
+        raise RuntimePlanError("routed microVM broker topology is incomplete")
+    for attachment in broker.attachments:
+        if attachment.network == scan.name:
+            if attachment.address is None:
+                raise RuntimePlanError("routed microVM broker needs a fixed scan address")
+            return attachment.address
+    raise RuntimePlanError("routed microVM broker is not attached to the scan network")
 
 
 def runtime_plan_path(paths: RepoPaths, runtime: str) -> Path:
@@ -400,7 +428,7 @@ def build_runtime_plan(
         egress_router = _fixed_address(routed_subnets.egress, 2)
         routes = tuple(
             NetworkRoute(destination, scan_router)
-            for destination in _unique_destinations(manifest)
+            for destination in _routed_route_destinations(manifest)
         )
         networks.extend(
             (
@@ -448,14 +476,20 @@ def build_runtime_plan(
 
     support: list[ContainerPlan] = []
     if broker_enabled:
+        broker_attachments = [
+            NetworkAttachment(names.internal),
+            NetworkAttachment(names.provider),
+        ]
+        if mode == "routed" and manifest.runtime.isolation == "microvm":
+            assert routed_subnets is not None
+            broker_attachments.append(
+                NetworkAttachment(names.scan, _fixed_address(routed_subnets.scan, 3))
+            )
         support.append(
             ContainerPlan(
                 SessionRole.BROKER,
                 identity.ephemeral_container(runtime, "litellm", owner_pid),
-                (
-                    NetworkAttachment(names.internal),
-                    NetworkAttachment(names.provider),
-                ),
+                tuple(broker_attachments),
             )
         )
     if mode == "proxy":
@@ -493,6 +527,15 @@ def build_runtime_plan(
                 ),
             )
         )
+        if manifest.observability.network_activity:
+            support.append(
+                ContainerPlan(
+                    SessionRole.NETWORK_OBSERVER,
+                    identity.ephemeral_container(runtime, "network-observer", owner_pid),
+                    network_namespace_of=gateway_name,
+                    capabilities=frozenset({"net_raw"}),
+                )
+            )
 
     volume_names = state_volume_names(identity, runtime, manifest)
     volume_targets = tuple(entry.target for entry in manifest.state_volumes) + (
@@ -509,8 +552,11 @@ def build_runtime_plan(
 
     generated = [
         GeneratedFilePlan(GeneratedFileKind.RUNTIME_PLAN, runtime_plan_path(paths, runtime)),
-        GeneratedFilePlan(GeneratedFileKind.DEVCONTAINER, identity.config_json(runtime)),
     ]
+    if manifest.runtime.isolation == "container":
+        generated.append(
+            GeneratedFilePlan(GeneratedFileKind.DEVCONTAINER, identity.config_json(runtime))
+        )
     if mode == "proxy":
         generated.append(
             GeneratedFilePlan(
@@ -546,6 +592,7 @@ def build_runtime_plan(
         owner_pid=owner_pid,
         adapter=manifest.adapter,
         runtime_mode=manifest.runtime.mode,
+        runtime_isolation=manifest.runtime.isolation,
         network_mode=mode,
         command=manifest.runtime.command,
         broker_enabled=broker_enabled,
@@ -640,6 +687,7 @@ def _runtime_plan_from_dict(payload: dict[str, Any]) -> RuntimePlan:
         "owner_pid",
         "adapter",
         "runtime_mode",
+        "runtime_isolation",
         "network_mode",
         "command",
         "broker_enabled",
@@ -664,6 +712,7 @@ def _runtime_plan_from_dict(payload: dict[str, Any]) -> RuntimePlan:
         owner_pid=owner_pid,
         adapter=_require_text(payload, "adapter", "runtime plan"),
         runtime_mode=_require_text(payload, "runtime_mode", "runtime plan"),
+        runtime_isolation=_require_text(payload, "runtime_isolation", "runtime plan"),
         network_mode=_require_text(payload, "network_mode", "runtime plan"),
         command=tuple(_require_text_list(payload, "command", "runtime plan")),
         broker_enabled=_require_bool(payload, "broker_enabled", "runtime plan"),
@@ -982,6 +1031,19 @@ def _unique_destinations(manifest: RuntimeManifest) -> tuple[IPv4Network, ...]:
     return tuple(destinations)
 
 
+def _routed_route_destinations(
+    manifest: RuntimeManifest,
+) -> tuple[IPv4Network, ...]:
+    destinations = list(_unique_destinations(manifest))
+    verification = manifest.network.routed_verification
+    if verification is None:
+        return tuple(destinations)
+    denied = verification.denied_address
+    if not any(denied in destination for destination in destinations):
+        destinations.append(IPv4Network(f"{denied}/32"))
+    return tuple(destinations)
+
+
 def _ephemeral_resources(
     identity: ResourceIdentity,
     runtime: str,
@@ -998,6 +1060,7 @@ def _ephemeral_resources(
         SessionRole.PROXY: ResourceKind.PROXY_CONTAINER,
         SessionRole.ROUTED_GATEWAY: ResourceKind.GATEWAY_CONTAINER,
         SessionRole.ROUTED_INIT: ResourceKind.GATEWAY_INIT_CONTAINER,
+        SessionRole.NETWORK_OBSERVER: ResourceKind.NETWORK_OBSERVER_CONTAINER,
     }
     resources = [
         Resource(kind_for_role[runtime_container.role], runtime_container.name, runtime),

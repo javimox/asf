@@ -13,10 +13,29 @@ adapter: generic
 
 runtime:
   mode: interactive
+  isolation: container  # container or microvm
 
+# Optional runtime capabilities (default: none).
+# NET_RAW is the only supported capability. With microVM isolation it requires routed mode.
+# capabilities: [net_raw]
+
+# Network policy is agent-agnostic; this example intentionally uses isolated.
 network:
+  # proxy -> domain allowlist through Caddy
+  # mode: proxy
+  # verify_domain: github.com
+  # allow_domains:
+  #   - github.com
+  #   - objects.githubusercontent.com
+  #   - raw.githubusercontent.com
+
+  # routed -> explicit destination CIDRs
+  # mode: routed
+  # allow:
+  #   - cidr: 192.0.2.10/32
+
+  # isolated -> no direct external destination fields
   mode: isolated
-  # No allow_domains: there is no proxy, so no external destination exists.
 
 filesystem:
   state:
@@ -27,6 +46,12 @@ llm:
   broker: true
   protocol: openai
   provider: openai
+
+observability:
+  # Prompt capture is available only when the LiteLLM broker is enabled.
+  llm_prompts: false
+  # routed+microvm only; records TCP SYN, UDP and ICMP echo attempts, no payloads.
+  network_activity: false
 
 secrets:
   files:

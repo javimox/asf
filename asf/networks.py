@@ -94,6 +94,7 @@ class NetworkService:
                 f"Python network creation does not support {plan.network_mode!r}"
             )
         output.write(f"  {_BLUE}→{_RESET} Creating session networks\n")
+        started = time.monotonic()
         for network in plan.networks:
             self._create_one(plan, network)
 
@@ -111,17 +112,20 @@ class NetworkService:
             )
             output.write(
                 f"  {_GREEN}✓{_RESET} Routed networks ready "
-                f"{_DIM}(runtime: {runtime_address}){_RESET}\n"
+                f"{_DIM}(runtime: {runtime_address}; "
+                f"{time.monotonic() - started:.1f}s){_RESET}\n"
             )
         elif plan.network_mode == "isolated":
             output.write(
                 f"  {_GREEN}✓{_RESET} Networks ready "
-                f"{_DIM}(isolated: {internal.name}, no egress network){_RESET}\n"
+                f"{_DIM}(isolated: {internal.name}, no egress network; "
+                f"{time.monotonic() - started:.1f}s){_RESET}\n"
             )
         else:
             output.write(
                 f"  {_GREEN}✓{_RESET} Networks ready "
-                f"{_DIM}(agent is on {internal.name} only){_RESET}\n"
+                f"{_DIM}(agent is on {internal.name} only; "
+                f"{time.monotonic() - started:.1f}s){_RESET}\n"
             )
 
     def _create_one(self, plan: RuntimePlan, network: NetworkPlan) -> None:

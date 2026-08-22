@@ -7,6 +7,7 @@ identity and persisted-plan boundaries as ``open``.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -16,12 +17,17 @@ from typing import Sequence, TextIO
 from .config import AsfConfig
 from .devcontainer import BuildDevcontainerRequest, build_build_config, write_atomic
 from .errors import ConfigurationError, InfrastructureError, UsageError
+from .krun import build_krun_image_argv
 from .manifest import load_model
 from .paths import RepoPaths
 from .podman import PodmanClient
 from .process import run
 from .repositories import RepositoryStore
-from .runtime_plan import load_runtime_plan, runtime_plan_path, validate_runtime_plan_context
+from .runtime_plan import (
+    load_runtime_plan,
+    runtime_plan_path,
+    validate_runtime_plan_context,
+)
 from .session import SessionDiscovery
 
 __all__ = ["MaintenanceResult", "run_maintenance_command"]
@@ -65,7 +71,6 @@ def run_maintenance_command(
 
     client = PodmanClient() if podman is None else podman
     client.require_available()
-    _require_devcontainer()
     if argv[0] == "build":
         return _build(argv[1:], paths, client, output=output, error=error)
     return _scan(argv[1:], paths, client, output=output)
@@ -84,6 +89,27 @@ def _build(
     runtime = arguments[0]
     manifest = load_model(paths.identity.runtime_manifest(runtime))
     config = AsfConfig.load(paths.config_file)
+    if manifest.runtime.isolation == "microvm":
+        output.write(f"{_BLUE}Building {runtime} krun image...{_RESET}\n")
+        result = run(
+            build_krun_image_argv(
+                paths,
+                manifest,
+                build_arguments=config.build_arguments(),
+                engine=os.fspath(podman.engine),
+            ),
+            timeout=1800,
+            capture=False,
+        )
+        if result.returncode != 0:  # ``run`` raises; retained for custom runners.
+            raise MaintenanceError("Build failed.")
+        output.write(
+            f"{_GREEN}Done.{_RESET} Run {_BLUE}./sandbox.sh open {runtime}{_RESET} "
+            "to start a session.\n"
+        )
+        return MaintenanceResult()
+
+    _require_devcontainer()
 
     repositories = []
     store = RepositoryStore.for_file(
@@ -176,6 +202,15 @@ def _scan(
     manifest = load_model(paths.identity.runtime_manifest(runtime))
     plan = load_runtime_plan(runtime_plan_path(paths, runtime))
     validate_runtime_plan_context(plan, manifest, paths)
+    if plan.runtime_isolation == "microvm":
+        return MaintenanceResult(
+            1,
+            stderr=(
+                "scan is unavailable for runtime.isolation: microvm; "
+                "the krun backend cannot start Semgrep as a second process.\n"
+            ),
+        )
+    _require_devcontainer()
 
     configured = {
         entry.name

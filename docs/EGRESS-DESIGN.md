@@ -23,19 +23,26 @@ selected with `PROXY_IMPL` in production.
 
 ## Startup verification
 
-ASF verifies the policy before the agent container exists:
+ASF keeps startup verification intentionally small so every interactive open
+checks the critical boundary without rerunning the full security suite. Before
+the agent starts it verifies:
 
 1. the declared positive-control hostname accepts CONNECT on port 443;
-2. Caddy returns an explicit 403 for an undeclared hostname;
-3. Caddy returns an explicit 403 for forbidden ports on CONNECT and plain HTTP;
-4. loopback, private, link-local, and metadata destinations are rejected;
-5. the runtime network has no IPv4 or IPv6 default route;
-6. no public IPv4 route exists outside Caddy;
-7. direct external DNS is unavailable;
-8. while brokered, the provider API is rejected directly.
+2. a forbidden port on that hostname is denied;
+3. while brokered, the provider API is rejected directly; otherwise one
+   non-allowlisted destination is denied;
+4. the runtime network has no IPv4 or IPv6 default route;
+5. no public IPv4 route exists outside Caddy;
+6. direct external DNS is unavailable.
+
+The exhaustive Caddy deny matrix (generic undeclared destination, loopback,
+private IPv4/IPv6, link-local, and metadata destinations) remains in
+`./sandbox.sh test <agent>`. This keeps startup fail-closed on the critical
+path while leaving the broader security-boundary validation available on
+demand.
 
 Infrastructure errors and generic connection failures are not counted as policy
-denials. A deny verdict requires Caddy's 403 response.
+denials. A deny verdict requires Caddy's explicit rejection.
 
 ## Observability
 

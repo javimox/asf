@@ -32,6 +32,7 @@ class ResourceKind(str, Enum):
     SECRET = "secret"
     BROKER_STATE = "broker-state"
     PROXY_CONTAINER = "proxy-container"
+    NETWORK_OBSERVER_CONTAINER = "network-observer-container"
     GATEWAY_INIT_CONTAINER = "gateway-init-container"
     GATEWAY_CONTAINER = "gateway-container"
     NETWORK = "network"
@@ -48,6 +49,7 @@ TEARDOWN_ORDER: tuple[ResourceKind, ...] = (
     ResourceKind.SECRET,
     ResourceKind.BROKER_STATE,
     ResourceKind.PROXY_CONTAINER,
+    ResourceKind.NETWORK_OBSERVER_CONTAINER,
     ResourceKind.GATEWAY_INIT_CONTAINER,
     ResourceKind.GATEWAY_CONTAINER,
     ResourceKind.NETWORK,

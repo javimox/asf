@@ -122,6 +122,8 @@ def render_config(provider: str, models: list[str], agent: str = "") -> str:
             "litellm_settings:",
             "  set_verbose: false",
             "  turn_off_message_logging: true",
+            "  callbacks:",
+            "    - litellm_observer.proxy_handler_instance",
             "",
             "general_settings:",
             "  master_key: os.environ/LITELLM_MASTER_KEY",

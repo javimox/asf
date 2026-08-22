@@ -189,6 +189,10 @@ class RepoPaths:
     def litellm_entrypoint(self) -> Path:
         return self.tools_dir / "litellm_entrypoint.py"
 
+    @property
+    def litellm_observer(self) -> Path:
+        return self.tools_dir / "litellm_observer.py"
+
     def child(self, *parts: str | os.PathLike[str]) -> Path:
         """Return a physical child path contained by the checkout root.
 

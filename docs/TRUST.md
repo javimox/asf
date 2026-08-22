@@ -73,9 +73,13 @@ capability-less by default.
   g3proxy remain in dedicated comparison spikes; selecting either through
   `PROXY_IMPL` aborts startup rather than weakening the security claim.
 - **A misconfigured proxy going unnoticed.** Before the agent starts, ASF
-  checks from a throwaway container that an allowlisted host is reachable, a
-  non-allowlisted one is not, and no route or DNS path bypasses the proxy.
-  Failure aborts the session. (`StartupVerifier` in `asf/runtime.py`)
+  runs a compact critical-path verification from a throwaway container: an
+  allowlisted host must be reachable, a forbidden port must be denied, the
+  direct provider path (when brokered) or one undeclared destination must be
+  denied, and no route or DNS path may bypass the proxy. Failure aborts the
+  session. The broader loopback/private/link-local/metadata deny matrix is
+  available through `./sandbox.sh test <agent>`. (`StartupVerifier` in
+  `asf/runtime.py`)
 - **The provider API key leaking to the agent.** With the broker enabled the
   key is mounted as a file into the broker only, never in the agent's
   environment, and the proxy drops the provider's domain from the allowlist so
@@ -155,7 +159,7 @@ inherited by the later exec client. (`asf/broker.py`, `asf/process.py`,
 |---|---|---|
 | `proxy` (default) | declared domains, port 443, both request paths | allow path, deny path, port, no-bypass |
 | `isolated` | internal services only — no external path | no external TCP, no external DNS, internal reachable |
-| `routed` | declared IPv4 CIDR/protocol/port tuples | allow path, known-open blocked port, declared routes, no default route |
+| `routed` | declared IPv4 CIDR/protocol/port tuples | declared routes and no default route; optional live allow/deny controls |
 
 **`isolated` is not offline.** The runtime may still reach services on its
 private internal network, especially LiteLLM; the broker forwards to an

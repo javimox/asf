@@ -14,7 +14,7 @@ def render(rules: list[dict], source_ip: str, scan_if: str, egress_if: str) -> s
     typed = tuple(
         RoutedRule(
             IPv4Network(item["cidr"], strict=True),
-            item["protocol"],
+            item.get("protocol"),
             (
                 tuple(item["ports"])
                 if isinstance(item.get("ports"), list)

@@ -15,6 +15,7 @@ from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path
 from typing import Sequence, TextIO
 
+from .broker import BROKER_PORT
 from .errors import ConfigurationError, InfrastructureError
 from .models import RuntimeManifest
 from .podman import PodmanClient, PodmanError
@@ -22,11 +23,13 @@ from .runtime_plan import (
     GeneratedFileKind,
     NetworkRole,
     RuntimePlan,
+    routed_broker_address,
 )
 from .routed_policy import render_routed_policy
 from .session import SessionRole
 
 __all__ = [
+    "ROUTED_TAP_NAME",
     "ROUTED_GATEWAY_IMAGE_BASE",
     "ROUTED_GATEWAY_IMAGE_REV",
     "NO_CAPABILITIES",
@@ -35,6 +38,7 @@ __all__ = [
     "RoutedGatewayError",
     "RoutedRequest",
     "RoutedService",
+    "routed_tap_addresses",
     "parse_gateway_hardening",
     "validate_capability_boundary",
 ]
@@ -51,10 +55,16 @@ _DIM = "\033[2m"
 _RESET = "\033[0m"
 _INTERFACE_RE = re.compile(r"^\d+:\s+([^\s]+)\s+inet\s+([^/\s]+)/")
 NO_CAPABILITIES = "0000000000000000"
+ROUTED_TAP_NAME = "tap0"
 _CAPABILITY_MASK_RE = re.compile(r"^[0-9a-f]{16}$")
 _NET_ADMIN_BIT = 1 << 12
 _LOADER = r'''
 set -eu
+if [ -n "${ASF_TAP_NAME:-}" ]; then
+    ip tuntap add dev "$ASF_TAP_NAME" mode tap user 0
+    ip addr add "$ASF_TAP_GATEWAY/30" dev "$ASF_TAP_NAME"
+    ip link set "$ASF_TAP_NAME" up
+fi
 for target in "$@"; do
     routes=$(ip route show "$target" via "$ASF_GW_SCAN_IP") || {
         echo "could not query the gateway self-route for $target" >&2
@@ -82,6 +92,16 @@ done
 
 class RoutedGatewayError(InfrastructureError):
     """The routed gateway could not be created or proven safe."""
+
+
+def routed_tap_addresses(plan: RuntimePlan) -> tuple[IPv4Address, IPv4Address]:
+    """Return gateway and guest addresses for the krun TAP point-to-point link."""
+
+    internal = plan.network(NetworkRole.INTERNAL)
+    if internal is None or internal.subnet is None:
+        raise ConfigurationError("routed TAP requires the planned internal subnet")
+    subnet = next(internal.subnet.subnets(new_prefix=30))
+    return subnet.network_address + 1, subnet.network_address + 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +314,22 @@ class RoutedRequest:
                 values.append(rule.destination)
         return tuple(values)
 
+    @property
+    def uses_tap(self) -> bool:
+        return self.manifest.runtime.isolation == "microvm"
+
+    @property
+    def tap_gateway_ip(self) -> IPv4Address:
+        return routed_tap_addresses(self.plan)[0]
+
+    @property
+    def tap_guest_ip(self) -> IPv4Address:
+        return routed_tap_addresses(self.plan)[1]
+
+    @property
+    def broker_address(self) -> IPv4Address | None:
+        return routed_broker_address(self.plan)
+
 
 @dataclass(frozen=True, slots=True)
 class RoutedGateway:
@@ -351,6 +387,8 @@ class RoutedGateway:
         )
         if persistent_net_admin:
             argv.append("--cap-add=NET_ADMIN")
+            if request.uses_tap:
+                argv.extend(("--device", "/dev/net/tun"))
         argv.extend(
             (
                 "--security-opt=no-new-privileges",
@@ -386,7 +424,7 @@ class RoutedGateway:
 
     def initializer_argv(self) -> tuple[str, ...]:
         request = self.request
-        return (
+        argv: list[str] = [
             self.engine,
             "run",
             "--rm",
@@ -408,31 +446,75 @@ class RoutedGateway:
             "/run:rw,nosuid,nodev,noexec,size=2m",
             "--pids-limit=16",
             "--memory=32m",
-            "-e",
-            f"ASF_GW_SCAN_IP={request.gateway_scan_ip}",
-            "-i",
-            self.image,
-            "sh",
-            "-euc",
-            _LOADER,
-            "sh",
-            *(str(item) for item in request.destinations),
+        ]
+        if request.uses_tap:
+            argv.extend(
+                (
+                    "--device",
+                    "/dev/net/tun",
+                    "-e",
+                    f"ASF_TAP_NAME={ROUTED_TAP_NAME}",
+                    "-e",
+                    f"ASF_TAP_GATEWAY={request.tap_gateway_ip}",
+                )
+            )
+        argv.extend(
+            (
+                "-e",
+                f"ASF_GW_SCAN_IP={request.gateway_scan_ip}",
+                "-i",
+                self.image,
+                "sh",
+                "-euc",
+                _LOADER,
+                "sh",
+                *(str(item) for item in request.destinations),
+            )
         )
+        return tuple(argv)
 
     def persistent_loader_argv(self) -> tuple[str, ...]:
         request = self.request
-        return (
+        argv: list[str] = [
             self.engine,
             "exec",
             "-i",
-            "-e",
-            f"ASF_GW_SCAN_IP={request.gateway_scan_ip}",
-            request.gateway.name,
-            "sh",
-            "-euc",
-            _LOADER,
-            "sh",
-            *(str(item) for item in request.destinations),
+        ]
+        if request.uses_tap:
+            argv.extend(
+                (
+                    "-e",
+                    f"ASF_TAP_NAME={ROUTED_TAP_NAME}",
+                    "-e",
+                    f"ASF_TAP_GATEWAY={request.tap_gateway_ip}",
+                )
+            )
+        argv.extend(
+            (
+                "-e",
+                f"ASF_GW_SCAN_IP={request.gateway_scan_ip}",
+                request.gateway.name,
+                "sh",
+                "-euc",
+                _LOADER,
+                "sh",
+                *(str(item) for item in request.destinations),
+            )
+        )
+        return tuple(argv)
+
+    def tap_inspect_argv(self) -> tuple[str, ...]:
+        return (
+            self.engine,
+            "exec",
+            self.request.gateway.name,
+            "ip",
+            "-o",
+            "-4",
+            "addr",
+            "show",
+            "dev",
+            ROUTED_TAP_NAME,
         )
 
 
@@ -570,15 +652,25 @@ class RoutedService:
                 )
 
         scan_interface, egress_interface = self._interface_names(request, image)
+        verification = request.manifest.network.routed_verification
         policy = render_routed_policy(
             request.manifest.network.routed_rules,
             request.runtime_scan_ip,
             scan_interface,
             egress_interface,
+            tap_source_ip=(request.tap_guest_ip if request.uses_tap else None),
+            tap_interface=(ROUTED_TAP_NAME if request.uses_tap else None),
+            blocked_probe_address=(
+                verification.denied_address if verification is not None else None
+            ),
+            broker_address=request.broker_address,
+            broker_port=BROKER_PORT,
         )
         self._write_policy(request.policy_path, policy)
         output.write(f"  {_BLUE}→{_RESET} Loading routed nftables policy\n")
         self._load_policy(commands, policy, persistent=persistent)
+        if request.uses_tap:
+            self._assert_tap_ready(commands, request.tap_gateway_ip)
         if persistent:
             output.write(
                 f"  {_GREEN}✓{_RESET} Routed gateway ready "
@@ -716,6 +808,13 @@ class RoutedService:
         raise RoutedGatewayError(
             f"Could not verify routed initializer exit{suffix}"
         )
+
+    def _assert_tap_ready(
+        self, commands: RoutedGateway, gateway_ip: IPv4Address
+    ) -> None:
+        result = self.podman.observe(commands.tap_inspect_argv(), timeout=10)
+        if not result.succeeded or f" {gateway_ip}/30 " not in f" {result.stdout} ":
+            raise RoutedGatewayError("Routed krun TAP interface is not ready")
 
     def _ensure_image(self, *, output: TextIO) -> str:
         material = (

@@ -100,6 +100,56 @@ class MaintenanceCommandTests(unittest.TestCase):
         )
         self.assertFalse(any(str(hermes_repo) in mount for mount in mounts))
 
+    @mock.patch("asf.maintenance.run")
+    def test_build_supports_krun_as_explicit_rebuild(self, command) -> None:
+        manifest = self.root / "agents" / "hermes" / "runtime.yml"
+        text = manifest.read_text(encoding="utf-8")
+        text = text.replace(
+            "  isolation: container  # container or microvm\n",
+            "  isolation: microvm  # container or microvm\n",
+            1,
+        )
+        manifest.write_text(text, encoding="utf-8")
+        command.return_value = CommandResult(("podman",), 0, "", "")
+
+        result = run_maintenance_command(
+            ("build", "hermes"),
+            self.paths,
+            podman=AvailablePodman(),
+            output=self.output,
+            error=self.error,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        argv = command.call_args.args[0]
+        self.assertEqual(argv[:2], ("podman", "build"))
+        self.assertIn("AGENT=hermes", argv)
+        self.assertTrue(argv[argv.index("--tag") + 1].endswith(":krun"))
+        self.assertIn("Done.", self.output.getvalue())
+
+    @mock.patch("asf.maintenance.run")
+    def test_build_routed_krun_needs_no_subnet_allocation(self, command) -> None:
+        manifest = self.root / "agents" / "routed-scanner" / "runtime.yml"
+        self.assertIn("isolation: microvm", manifest.read_text(encoding="utf-8"))
+        command.return_value = CommandResult(("podman",), 0, "", "")
+
+        result = run_maintenance_command(
+            ("build", "routed-scanner"),
+            self.paths,
+            podman=AvailablePodman(),
+            output=self.output,
+            error=self.error,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        argv = command.call_args.args[0]
+        self.assertEqual(argv[:2], ("podman", "build"))
+        self.assertIn("AGENT=generic", argv)
+        self.assertIn(
+            self.paths.identity.session_key("routed-scanner").lower(),
+            argv[argv.index("--tag") + 1],
+        )
+
     @mock.patch("asf.maintenance.shutil.which", return_value="/usr/bin/devcontainer")
     def test_build_requires_exactly_one_runtime(self, _which) -> None:
         result = run_maintenance_command(

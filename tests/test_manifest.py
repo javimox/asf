@@ -46,6 +46,7 @@ class TypedManifestTests(unittest.TestCase):
         self.assertEqual(model.runtime.command, ())
         self.assertIsNone(model.llm)
         self.assertEqual(model.network.mode, "proxy")
+        self.assertFalse(model.observability.llm_prompts)
         self.assertEqual(model.capabilities, frozenset())
         with self.assertRaises(FrozenInstanceError):
             model.name = "changed"  # type: ignore[misc]
@@ -68,6 +69,44 @@ class TypedManifestTests(unittest.TestCase):
             model.environment_dict()["HERMES_YOLO_MODE"],
             "0",
         )
+
+    def test_prompt_observability_is_explicit_and_typed(self) -> None:
+        model = parse(
+            {
+                **MINIMAL,
+                "observability": {"llm_prompts": True},
+            }
+        )
+        self.assertTrue(model.observability.llm_prompts)
+
+    def test_prompt_observability_requires_broker(self) -> None:
+        with self.assertRaisesRegex(ManifestError, "requires llm.broker: true"):
+            validate(
+                {
+                    "name": "demo",
+                    "llm": {"broker": False},
+                    "observability": {"llm_prompts": True},
+                }
+            )
+
+    def test_prompt_observability_requires_a_configured_broker(self) -> None:
+        with self.assertRaisesRegex(ManifestError, "requires llm.broker: true"):
+            validate(
+                {
+                    "name": "demo",
+                    "llm": {},
+                    "observability": {"llm_prompts": True},
+                }
+            )
+
+    def test_prompt_observability_rejects_non_boolean(self) -> None:
+        with self.assertRaisesRegex(ManifestError, "must be true or false"):
+            validate(
+                {
+                    **MINIMAL,
+                    "observability": {"llm_prompts": "yes"},
+                }
+            )
 
     def test_routed_manifest_uses_ipaddress_types(self) -> None:
         model = parse(
@@ -99,6 +138,66 @@ class TypedManifestTests(unittest.TestCase):
         self.assertEqual(verification.allowed_port, 443)
         self.assertTrue(rule.permits(verification.address, "tcp", 443))
         self.assertFalse(rule.permits(verification.address, "tcp", 22))
+
+    def test_routed_manifest_does_not_require_live_verification(self) -> None:
+        model = parse(
+            {
+                **MINIMAL,
+                "network": {
+                    "mode": "routed",
+                    "allow": [
+                        {
+                            "cidr": "192.0.2.9/32",
+                            "protocol": "tcp",
+                            "ports": [443],
+                        }
+                    ],
+                },
+            }
+        )
+        self.assertIsNone(model.network.routed_verification)
+
+    def test_routed_destination_only_rule_uses_separate_negative_control(self) -> None:
+        model = parse(
+            {
+                **MINIMAL,
+                "network": {
+                    "mode": "routed",
+                    "allow": [{"cidr": "192.0.2.9/32"}],
+                    "verify": {
+                        "address": "192.0.2.9",
+                        "protocol": "tcp",
+                        "port": 443,
+                        "blocked_address": "198.51.100.9",
+                        "blocked_port": 443,
+                    },
+                },
+            }
+        )
+        rule = model.network.routed_rules[0]
+        verification = model.network.routed_verification
+        self.assertIsNone(rule.protocol)
+        self.assertIsNone(rule.ports)
+        self.assertEqual(verification.denied_address, IPv4Address("198.51.100.9"))
+
+    def test_routed_ports_without_protocol_are_rejected(self) -> None:
+        with self.assertRaises(ManifestError):
+            validate(
+                {
+                    **MINIMAL,
+                    "network": {
+                        "mode": "routed",
+                        "allow": [{"cidr": "192.0.2.9/32", "ports": [443]}],
+                        "verify": {
+                            "address": "192.0.2.9",
+                            "protocol": "tcp",
+                            "port": 443,
+                            "blocked_address": "198.51.100.9",
+                            "blocked_port": 443,
+                        },
+                    },
+                }
+            )
 
 
 

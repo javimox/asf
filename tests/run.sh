@@ -37,7 +37,8 @@ for suite in \
     test_cli test_open_lifecycle test_broker_cli test_proxy_config \
     test_proxy_cli test_security_cli test_routed_shell test_guard \
     test_broker_enabled_open test_runtime_state \
-    test_integration test_isolated_integration test_routed_integration; do
+    test_integration test_isolated_integration test_routed_integration \
+    test_krun_integration test_krun_proxy_integration; do
     if "$ROOT/tests/${suite}.sh"; then
         echo "✓ ${suite}.sh"
     else

@@ -49,7 +49,7 @@ class PythonCliTests(unittest.TestCase):
         status = main(["unknown"], stdout=stdout, stderr=stderr)
         self.assertEqual(status, 1)
         self.assertEqual(stdout.getvalue(), "")
-        self.assertIn("{open|shell|ls|repo|repository|build|scan", stderr.getvalue())
+        self.assertIn("{open|shell|ls|observe|repo|repository|build|scan", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_open_requires_a_runtime(self) -> None:
@@ -108,7 +108,7 @@ class PythonCliTests(unittest.TestCase):
         stderr = io.StringIO()
         status = main(["repos"], stdout=io.StringIO(), stderr=stderr)
         self.assertEqual(status, 1)
-        self.assertIn("{open|shell|ls|repo|repository|build|scan", stderr.getvalue())
+        self.assertIn("{open|shell|ls|observe|repo|repository|build|scan", stderr.getvalue())
 
     def test_ls_renders_running_agent_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
