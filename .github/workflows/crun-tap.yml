@@ -98,9 +98,15 @@ jobs:
 
       - name: Verify libkrun TAP API
         run: |
-          libkrun=$(ldconfig -p | awk '!found && /libkrun\.so\.1/{print $NF; found=1}')
-          test -n "$libkrun"
-          nm -D "$libkrun" | grep ' krun_add_net_tap$'
+          libdir=$(pkg-config --variable=libdir libkrun)
+          libkrun="$libdir/libkrun.so.1"
+
+          test -e "$libkrun"
+
+          echo "Verifying libkrun: $(readlink -f "$libkrun")"
+
+          nm -D --defined-only "$libkrun" \
+            | awk '$3 == "krun_add_net_tap" { found=1 } END { exit !found }'
 
       - name: Build crun under test with ASF TAP extension
         id: candidate
