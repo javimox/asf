@@ -62,8 +62,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             autoconf automake build-essential curl git go-md2man \
-            libcap-dev libjson-c-dev libprotobuf-c-dev libseccomp-dev \
-            libsystemd-dev libtool patchelf pkgconf podman \
+            libcap-dev libclang-dev libjson-c-dev libprotobuf-c-dev libseccomp-dev \
+            libsystemd-dev libtool llvm-dev patchelf pkgconf podman \
             fuse-overlayfs slirp4netns python3 uidmap
 
       - name: Enable KVM and TUN for the runner user
