@@ -185,7 +185,7 @@ def krun_runtime_name(paths: RepoPaths, manifest: RuntimeManifest) -> str:
     configured = os.environ.get("CRUN_TAP_RUNTIME")
     if configured:
         return configured
-    return os.fspath(paths.root / "tools/experiments/.krun-tap-runtime/bin/crun")
+    return os.fspath(paths.root / "tools/krun-runtime/bin/crun")
 
 
 def require_krun_host(
@@ -201,10 +201,35 @@ def require_krun_host(
         runtime = Path(krun_runtime_name(paths, manifest))
         if not runtime.is_file() or not os.access(runtime, os.X_OK):
             raise KrunError(
-                f"TAP-capable krun runtime not found: {runtime}. Run "
-                "tools/experiments/build-krun-tap-runtime.sh or set "
-                "CRUN_TAP_RUNTIME to an equivalent executable."
+                f"ASF TAP-capable crun runtime not found: {runtime}. "
+                "Build it with tools/krun-runtime/build.sh, or set "
+                "CRUN_TAP_RUNTIME to an equivalent development executable."
             )
+        if not os.environ.get("CRUN_TAP_RUNTIME"):
+            # The default local build must match ASF's pinned upstream release.
+            # CRUN_TAP_RUNTIME is the explicit development override.
+            pin_dir = paths.root / "tools/krun-runtime"
+            try:
+                pinned = (
+                    (pin_dir / "VERSION").read_text().strip(),
+                    (pin_dir / "COMMIT").read_text().strip(),
+                )
+                local = (
+                    (runtime.parent / "VERSION").read_text().strip(),
+                    (runtime.parent / "COMMIT").read_text().strip(),
+                )
+            except OSError as exc:
+                raise KrunError(
+                    "TAP-capable crun provenance files are missing; rebuild "
+                    "with tools/krun-runtime/build.sh"
+                ) from exc
+            if local != pinned:
+                raise KrunError(
+                    "local TAP-capable crun "
+                    f"{local[0]} ({local[1]}) does not match ASF's pinned "
+                    f"release {pinned[0]} ({pinned[1]}); rebuild with "
+                    "tools/krun-runtime/build.sh"
+                )
         tun = Path("/dev/net/tun")
         if not tun.exists() or not os.access(tun, os.R_OK | os.W_OK):
             raise KrunError(

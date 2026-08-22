@@ -99,3 +99,5 @@ temp/
 
 .DS_Store
 Thumbs.db
+# Local TAP-capable crun build output
+/tools/krun-runtime/bin/

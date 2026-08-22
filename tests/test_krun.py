@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import os
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,8 @@ from asf.krun import (  # noqa: E402
     build_krun_build_argv,
     build_krun_environment,
     build_krun_run_argv,
+    krun_runtime_name,
+    require_krun_host,
     validate_krun_beta,
 )
 from asf.manifest import ManifestError, load_model, parse  # noqa: E402
@@ -77,6 +80,61 @@ class KrunBackendTests(unittest.TestCase):
             ),
             build_arguments=("NODE_VERSION=22.23.1",),
         )
+
+    def test_routed_microvm_uses_local_tap_runtime_unless_overridden(self) -> None:
+        routed = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
+        expected = ROOT / "tools" / "krun-runtime" / "bin" / "crun"
+
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(krun_runtime_name(self.paths, routed), str(expected))
+
+        with mock.patch.dict(
+            "os.environ", {"CRUN_TAP_RUNTIME": "/tmp/custom-crun"}, clear=True
+        ):
+            self.assertEqual(
+                krun_runtime_name(self.paths, routed), "/tmp/custom-crun"
+            )
+
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(krun_runtime_name(self.paths, self.manifest), "krun")
+
+    def test_routed_host_check_fails_closed_on_stale_local_runtime(self) -> None:
+        routed = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
+            (root / "agents").mkdir()
+            (root / ".devcontainer").mkdir()
+            runtime_dir = root / "tools" / "krun-runtime"
+            install = runtime_dir / "bin"
+            install.mkdir(parents=True)
+            (runtime_dir / "VERSION").write_text("1.29.1\n")
+            (runtime_dir / "COMMIT").write_text("a" * 40 + "\n")
+            crun = install / "crun"
+            crun.write_text("#!/bin/sh\n")
+            crun.chmod(0o755)
+            paths = replace(self.paths, root=root)
+
+            with mock.patch.dict("os.environ", {}, clear=True):
+                with self.assertRaisesRegex(Exception, "provenance"):
+                    require_krun_host(paths, routed)
+
+                (install / "VERSION").write_text("1.28\n")
+                (install / "COMMIT").write_text("b" * 40 + "\n")
+                with self.assertRaisesRegex(Exception, "does not match"):
+                    require_krun_host(paths, routed)
+
+            # The explicit development override deliberately skips pin checks.
+            (install / "VERSION").unlink()
+            (install / "COMMIT").unlink()
+            with mock.patch.dict(
+                "os.environ", {"CRUN_TAP_RUNTIME": os.fspath(crun)}, clear=True
+            ):
+                try:
+                    require_krun_host(paths, routed)
+                except Exception as exc:
+                    self.assertNotIn("provenance", str(exc))
+                    self.assertNotIn("does not match", str(exc))
 
     def test_runtime_plan_persists_isolation_and_rejects_backend_drift(self) -> None:
         self.assertEqual(self.plan.runtime_isolation, "microvm")

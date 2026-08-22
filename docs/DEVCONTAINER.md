@@ -2,7 +2,7 @@
 
 What the default ASF container backend uses it for and what it provides.
 `runtime.isolation: microvm` bypasses this layer and uses direct Podman commands;
-see [krun microVM isolation](KRUN.md).
+see [microVM isolation](KRUN.md).
 
 ## What ASF uses
 
