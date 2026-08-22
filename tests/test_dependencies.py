@@ -72,29 +72,50 @@ class DependencyPinTests(unittest.TestCase):
         self.assertIn("iputils-ping", dockerfile)
         self.assertNotRegex(dockerfile, re.compile(r"^\s*nmap\s*\\$", re.MULTILINE))
 
-    def test_routed_scanner_example_documents_krun_negative_control(self) -> None:
+    def test_routed_scanner_example_documents_microvm_negative_control(self) -> None:
         manifest = (ROOT / "agents" / "routed-scanner" / "runtime.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("isolation: microvm", manifest)
         self.assertIn("blocked_address:", manifest)
 
-    def test_crun_tap_change_is_one_auditable_patch(self) -> None:
-        script = (
-            ROOT / "tools" / "experiments" / "build-krun-tap-runtime.sh"
-        ).read_text(encoding="utf-8")
+    def test_crun_tap_runtime_is_auditable_and_ci_tracks_latest(self) -> None:
+        runtime_dir = ROOT / "tools" / "krun-runtime"
+        script = (runtime_dir / "build.sh").read_text(encoding="utf-8")
         patch = (
-            ROOT
-            / "tools"
-            / "experiments"
-            / "patches"
-            / "crun-1.29.1-tap.patch"
+            runtime_dir / "patches" / "crun-tap-reference.patch"
         ).read_text(encoding="utf-8")
+        workflow = (
+            ROOT / ".github" / "workflows" / "crun-tap.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertRegex(
+            (runtime_dir / "VERSION").read_text().strip(),
+            r"^\d+\.\d+(?:\.\d+)?$",
+        )
+        self.assertRegex(
+            (runtime_dir / "COMMIT").read_text().strip(), r"^[0-9a-f]{40}$"
+        )
         self.assertIn('python3 - "$SRC/src/libcrun/handlers/krun.c"', script)
         self.assertIn("source.count(declaration) != 1", script)
         self.assertIn("configure_vm.count(passt) != 1", script)
+        self.assertIn("releases/latest", script)
+        self.assertIn("PINNED_COMMIT", script)
+        self.assertIn("EXPECTED_COMMIT", script)
         self.assertIn("krun_add_net_tap", patch)
         self.assertIn('find_annotation (container, "krun.tap_name")', patch)
+        # Review CI is deterministic; scheduled/manual CI tests upstream latest.
+        self.assertIn("$(cat tools/krun-runtime/VERSION)", workflow)
+        self.assertIn("selector=latest", workflow)
+        self.assertIn("LIBKRUNFW_SHA256", workflow)
+        self.assertIn("tests/test_krun_tap_ci.sh", workflow)
+        self.assertIn("verify-runtime.sh", workflow)
+        # Source and provenance are committed; the local executable is not.
+        self.assertFalse((runtime_dir / "bin" / "crun").exists())
+        self.assertIn(
+            "/tools/krun-runtime/bin/",
+            (ROOT / ".gitignore").read_text(encoding="utf-8"),
+        )
 
 
     def test_dockerfile_does_not_pipe_remote_scripts_to_shell(self) -> None:

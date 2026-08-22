@@ -74,8 +74,9 @@ npm install -g @devcontainers/cli
 ```
 
 The optional `runtime.isolation: microvm` backend does not use the Dev Container
-CLI. It requires a Linux host with KVM plus krun/libkrun instead. See
-[krun microVM isolation](KRUN.md) for installation and current limitations.
+CLI. It requires a Linux host with KVM plus krun/libkrun instead. Routed microVM
+mode also needs the local TAP-capable runtime built once with
+`tools/krun-runtime/build.sh`. See [microVM isolation](KRUN.md) for details.
 ### Python 3
 
 ASF uses Python for all host-side orchestration, deterministic configuration

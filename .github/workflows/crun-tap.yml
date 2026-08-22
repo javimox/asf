@@ -1,0 +1,144 @@
+name: crun TAP
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+  push:
+    paths:
+      - ".github/workflows/crun-tap.yml"
+      - "tools/krun-runtime/**"
+      - "tests/test_krun_tap_ci.sh"
+      - "asf/krun.py"
+      - "asf/routed.py"
+      - "asf/routed_policy.py"
+  pull_request:
+    paths:
+      - ".github/workflows/crun-tap.yml"
+      - "tools/krun-runtime/**"
+      - "tests/test_krun_tap_ci.sh"
+      - "asf/krun.py"
+      - "asf/routed.py"
+      - "asf/routed_policy.py"
+
+permissions:
+  contents: read
+
+jobs:
+  crun-tap:
+    name: crun + real TAP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    env:
+      # Keep the libkrun side stable so this job answers one moving question:
+      # does ASF's TAP extension still work with the crun under test?
+      LIBKRUN_TAG: v1.19.4
+      LIBKRUN_COMMIT: 728df8125077d0db44265f6e997c72b81b65c015
+      LIBKRUNFW_TAG: v5.5.0
+      LIBKRUNFW_SHA256: c169206b01c89fbe134f1728bf4f988702bc7f73b4cf73e6fdece447d6fceca1
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Push/PR runs build the pinned release from tools/krun-runtime/VERSION
+      # so review CI is deterministic: an upstream crun release cannot break
+      # an unrelated ASF change. Only the scheduled and manual runs chase
+      # "latest"; when upstream moves past the pin, verify-runtime.sh below
+      # fails, which is the intended drift alarm.
+      - name: Select crun under test
+        id: mode
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "selector=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "selector=$(cat tools/krun-runtime/VERSION)" >> "$GITHUB_OUTPUT"
+            echo "expect_commit=$(cat tools/krun-runtime/COMMIT)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install host and crun build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake build-essential curl git go-md2man \
+            libcap-dev libjson-c-dev libprotobuf-c-dev libseccomp-dev \
+            libsystemd-dev libtool patchelf pkgconf podman \
+            fuse-overlayfs slirp4netns python3 uidmap
+
+      - name: Enable KVM and TUN for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo modprobe tun
+          sudo chmod a+rw /dev/kvm /dev/net/tun
+          test -r /dev/kvm && test -w /dev/kvm
+          test -r /dev/net/tun && test -w /dev/net/tun
+
+      - name: Install pinned libkrun test runtime
+        run: |
+          curl -fL -o /tmp/libkrunfw-x86_64.tgz \
+            "https://github.com/libkrun/libkrunfw/releases/download/${LIBKRUNFW_TAG}/libkrunfw-x86_64.tgz"
+          echo "${LIBKRUNFW_SHA256}  /tmp/libkrunfw-x86_64.tgz" | sha256sum --check --strict
+          mkdir -p /tmp/libkrunfw
+          tar xf /tmp/libkrunfw-x86_64.tgz -C /tmp/libkrunfw
+          sudo cp -a /tmp/libkrunfw/lib64/. /usr/local/lib/
+
+          git clone --quiet --depth 1 --branch "$LIBKRUN_TAG" \
+            https://github.com/libkrun/libkrun.git /tmp/libkrun
+          test "$(git -C /tmp/libkrun rev-parse HEAD)" = "$LIBKRUN_COMMIT"
+          make -C /tmp/libkrun NET=1
+          sudo make -C /tmp/libkrun NET=1 install
+          sudo ldconfig
+
+          echo 'PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig:/usr/local/lib/pkgconfig' >> "$GITHUB_ENV"
+          echo 'LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib' >> "$GITHUB_ENV"
+
+      - name: Verify libkrun TAP API
+        run: |
+          libkrun=$(ldconfig -p | awk '!found && /libkrun\.so\.1/{print $NF; found=1}')
+          test -n "$libkrun"
+          nm -D "$libkrun" | grep ' krun_add_net_tap$'
+
+      - name: Build crun under test with ASF TAP extension
+        id: candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CRUN_EXPECT_COMMIT: ${{ steps.mode.outputs.expect_commit }}
+        run: |
+          tools/krun-runtime/build.sh "${{ steps.mode.outputs.selector }}" \
+            "$RUNNER_TEMP/asf-crun-candidate"
+          echo "version=$(cat "$RUNNER_TEMP/asf-crun-candidate/VERSION")" >> "$GITHUB_OUTPUT"
+          echo "commit=$(cat "$RUNNER_TEMP/asf-crun-candidate/COMMIT")" >> "$GITHUB_OUTPUT"
+
+      - name: Test candidate over real TAP
+        env:
+          ASF_KRUN_TAP_CI: "1"
+          CRUN_TAP_RUNTIME: ${{ runner.temp }}/asf-crun-candidate/crun
+        run: tests/test_krun_tap_ci.sh
+
+      - name: Upload tested candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asf-crun-${{ steps.candidate.outputs.version }}-linux-x86_64
+          path: ${{ runner.temp }}/asf-crun-candidate/
+          if-no-files-found: error
+
+      # Exercise ASF's real resolution path: install the candidate where hosts
+      # install their own build, verify it against the pin, and run the TAP
+      # test again without CRUN_TAP_RUNTIME. On scheduled/manual runs a newer
+      # upstream release fails verify-runtime.sh here — the drift alarm.
+      - name: Install candidate as the local runtime
+        run: |
+          mkdir -p tools/krun-runtime/bin
+          cp -a "$RUNNER_TEMP/asf-crun-candidate/." tools/krun-runtime/bin/
+
+      - name: Verify local runtime matches the pinned release
+        run: tools/krun-runtime/verify-runtime.sh
+
+      - name: Test pinned resolution path over real TAP
+        env:
+          ASF_KRUN_TAP_CI: "1"
+        run: tests/test_krun_tap_ci.sh

@@ -309,7 +309,7 @@ or `pip install pyyaml`).
 `runtime.isolation` is optional. `container` is the default and preserves the
 existing Dev Container lifecycle. `krun` runs only the agent workload behind a
 libkrun/KVM boundary and has deliberate runtime constraints; see
-[krun microVM isolation](KRUN.md).
+[microVM isolation](KRUN.md).
 ### LangGraph, CrewAI, smolagents, or your own Python agent
 
 ASF sandboxes these as **one workload** — there is no CrewAI adapter and no

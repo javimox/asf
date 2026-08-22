@@ -12,13 +12,15 @@ dependencies that the operator controls.
 | setuptools | `>=77` when building a wheel | build range | package metadata/build backend |
 | Podman | rootless, Netavark backend | host-managed | containers, networks, secrets, volumes |
 | Dev Container CLI | compatible current release | host-managed | default `container` backend build/up/exec boundary |
-| krun + libkrun + KVM | optional | host-managed | `runtime.isolation: microvm` microVM boundary |
+| ASF TAP-capable crun | optional | repository-pinned source + CI-tested | routed `runtime.isolation: microvm` backend |
+| system krun + libkrun + KVM | optional | host-managed | microVM boundary; system `krun` is used for isolated/proxy mode |
 | Bash | `>=4` for test harnesses | host-managed | tests and small fixed scripts |
 | ShellCheck | optional | host-managed | shell static analysis |
 
-Podman, Dev Container CLI, krun and libkrun are intentionally not downloaded or
-upgraded by ASF. Record the versions relevant to the backend used for release
-validation with:
+Podman, Dev Container CLI, system krun and libkrun are host-managed. Routed
+microVM mode pins the small TAP-capable crun frontend by source under
+`tools/krun-runtime/`; hosts build it locally and dedicated CI validates the
+pin. Record the versions relevant to the backend used for release validation:
 
 ```bash
 python3 --version
@@ -26,7 +28,8 @@ python3 -c 'import yaml; print(yaml.__version__)'
 podman --version
 podman info --format '{{.Host.NetworkBackend}}'
 devcontainer --version
-krun --version                 # when validating krun isolation
+krun --version                 # system runtime for isolated/proxy microVM
+tools/krun-runtime/bin/crun --version  # routed local runtime
 ```
 
 ## Pinned runtime/build inputs
@@ -48,6 +51,7 @@ Pins below come from `asf.conf` and security-sensitive Python constants.
 | Caddy builder image | `docker.io/library/caddy@sha256:cc6c40aa7cdea02ef9cb99f3c4e4664ecdb6066ae93ae52ed5288afc511e1241` |
 | Caddy | `v2.10.0` |
 | Caddy forwardproxy | commit `0aab84dad4fc2830789f34e27b4d7bc22a40889e` |
+| Routed crun | `tools/krun-runtime/VERSION` + `COMMIT` (binary built locally) |
 
 The Node, uv, and LiteLLM references are exact tags rather than immutable image
 digests. Release builds should record resolved image digests, and a future pin

@@ -119,7 +119,7 @@ The full documentation is organized under [docs/](docs/README.md):
 - [Network design](docs/NETWORK-DESIGN.md)
 - [Egress design](docs/EGRESS-DESIGN.md)
 - [Dev Container integration](docs/DEVCONTAINER.md)
-- [krun microVM isolation](docs/KRUN.md)
+- [microVM isolation](docs/KRUN.md)
 - [observability](docs/OBSERVABILITY.md)
 - [Dependencies and SBOM scope](docs/DEPENDENCIES.md)
 - [Testing](docs/TESTING.md)

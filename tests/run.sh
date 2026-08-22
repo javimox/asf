@@ -14,7 +14,8 @@ bash -n \
     "$ROOT"/agents/*/setup.sh \
     "$ROOT"/tests/*.sh \
     "$ROOT"/tests/lib/*.sh \
-    "$ROOT"/tests/experiments/*.sh
+    "$ROOT"/tests/experiments/*.sh \
+    "$ROOT"/tools/krun-runtime/*.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck --severity=warning --external-sources \
@@ -23,7 +24,8 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$ROOT"/agents/*/setup.sh \
         "$ROOT"/tests/*.sh \
         "$ROOT"/tests/lib/*.sh \
-        "$ROOT"/tests/experiments/*.sh
+        "$ROOT"/tests/experiments/*.sh \
+        "$ROOT"/tools/krun-runtime/*.sh
 else
     echo "shellcheck not found; skipping local static shell analysis" >&2
 fi
