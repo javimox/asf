@@ -68,10 +68,8 @@ CF
     --security-opt=no-new-privileges \
     "$IMAGE" \
     sh -ceu '
-        mkdir -p /srv
-        printf ok >/srv/index.html
-        httpd -h /srv -f -p 18080 &
-        httpd -h /srv -f -p 19999 &
+        while :; do nc -l -p 18080 >/dev/null 2>&1; done &
+        while :; do nc -l -p 19999 >/dev/null 2>&1; done &
         wait
     ' >/dev/null
 
@@ -94,9 +92,12 @@ for port in "$ALLOWED_PORT" "$BLOCKED_PORT"; do
         fi
         sleep 0.25
     done
-    (( ready == 1 )) || {
-        echo "target positive control failed on TCP/$port" >&2
-        exit 1
+        (( ready == 1 )) || {
+            echo "target positive control failed on TCP/$port" >&2
+            "$ENGINE" ps -a --filter "name=$TARGET" >&2 || true
+            "$ENGINE" logs "$TARGET" >&2 || true
+            exit 1
+        }
     }
 done
 
