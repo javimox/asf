@@ -92,12 +92,11 @@ for port in "$ALLOWED_PORT" "$BLOCKED_PORT"; do
         fi
         sleep 0.25
     done
-        (( ready == 1 )) || {
-            echo "target positive control failed on TCP/$port" >&2
-            "$ENGINE" ps -a --filter "name=$TARGET" >&2 || true
-            "$ENGINE" logs "$TARGET" >&2 || true
-            exit 1
-        }
+    (( ready == 1 )) || {
+        echo "target positive control failed on TCP/$port" >&2
+        "$ENGINE" ps -a --filter "name=$TARGET" >&2 || true
+        "$ENGINE" logs "$TARGET" >&2 || true
+        exit 1
     }
 done
 
