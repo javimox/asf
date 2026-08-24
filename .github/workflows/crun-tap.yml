@@ -62,9 +62,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             autoconf automake build-essential curl git go-md2man \
-            libcap-dev libclang-dev libjson-c-dev libprotobuf-c-dev libseccomp-dev \
-            libsystemd-dev libtool llvm-dev patchelf pkgconf podman \
-            fuse-overlayfs slirp4netns python3 uidmap
+            libcap-dev libclang-dev libjson-c-dev libprotobuf-c-dev \
+            libseccomp-dev libsystemd-dev libtool llvm-dev patchelf pkgconf \
+            podman fuse-overlayfs slirp4netns python3 uidmap
 
       - name: Enable KVM and TUN for the runner user
         run: |
@@ -99,14 +99,10 @@ jobs:
       - name: Verify libkrun TAP API
         run: |
           libdir=$(pkg-config --variable=libdir libkrun)
+          test -n "$libdir"
           libkrun="$libdir/libkrun.so.1"
-
           test -e "$libkrun"
-
-          echo "Verifying libkrun: $(readlink -f "$libkrun")"
-
-          nm -D --defined-only "$libkrun" \
-            | awk '$3 == "krun_add_net_tap" { found=1 } END { exit !found }'
+          nm -D --defined-only "$libkrun" | grep ' krun_add_net_tap$'
 
       - name: Build crun under test with ASF TAP extension
         id: candidate
