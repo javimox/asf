@@ -1,202 +1,225 @@
-"""Focused tests for routed TAP network observation."""
+"""Focused tests for on-demand routed TAP packet capture."""
 
 from __future__ import annotations
 
-import io
 import os
-import socket
-import struct
+import tempfile
 import unittest
-from dataclasses import replace
-from ipaddress import IPv4Network
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
-from asf.manifest import load_model, parse
-from asf.models import RoutedRule
-from asf.network_observer import NetworkObserverService
-from asf.network_observer_runtime import MAX_LOG_BYTES, _bounded_write, parse_frame
-from asf.observation_sessions import begin_observation_session
-from asf.ownership import ResourceKind
-from asf.process import CommandResult
+from asf.network_observer import (
+    NetworkCaptureError,
+    NetworkCaptureService,
+    run_capture_command,
+)
+from asf.runs import begin_run
 from asf.paths import RepoPaths
-from asf.runtime_plan import build_runtime_plan
-from asf.session import SessionRole
-
-ROOT = Path(__file__).resolve().parents[1]
+from asf.process import CommandResult
+from asf.session import SessionRole, SessionStatus
 
 
-def _frame(src: str, dst: str, proto: int, transport: bytes) -> bytes:
-    ethernet = b"\x00" * 12 + struct.pack("!H", 0x0800)
-    ip = bytearray(20)
-    ip[0] = 0x45
-    ip[9] = proto
-    ip[12:16] = socket.inet_aton(src)
-    ip[16:20] = socket.inet_aton(dst)
-    return ethernet + bytes(ip) + transport
-
-
-class NetworkObserverPlanTests(unittest.TestCase):
-    def test_network_activity_requires_routed_krun(self) -> None:
-        with self.assertRaisesRegex(Exception, "requires network.mode: routed"):
-            parse(
-                {
-                    "name": "worker",
-                    "runtime": {"isolation": "container"},
-                    "observability": {"network_activity": True},
-                    "network": {
-                        "mode": "proxy",
-                        "verify_domain": "example.com",
-                        "allow_domains": ["example.com"],
-                    },
-                }
-            )
-
-    def test_observer_has_net_raw_only_and_shares_gateway_namespace(self) -> None:
-        manifest = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
-        manifest = replace(
-            manifest,
-            observability=replace(manifest.observability, network_activity=True),
-            network=replace(
-                manifest.network,
-                routed_rules=(RoutedRule(IPv4Network("192.0.2.10/32")),),
-            ),
-        )
-        from asf.routed_allocation import RoutedSubnetAllocation
-        plan = build_runtime_plan(
-            manifest,
-            paths=RepoPaths.for_root(ROOT),
-            owner_pid=4242,
-            broker_globally_enabled=False,
-            routed_subnets=RoutedSubnetAllocation(
-                IPv4Network("10.76.1.0/24"),
-                IPv4Network("10.77.1.0/24"),
-                IPv4Network("10.79.1.0/24"),
-            ),
-        )
-        observer = plan.container(SessionRole.NETWORK_OBSERVER)
-        gateway = plan.container(SessionRole.ROUTED_GATEWAY)
-        assert observer is not None and gateway is not None
-        self.assertEqual(observer.capabilities, frozenset({"net_raw"}))
-        self.assertEqual(observer.network_namespace_of, gateway.name)
-        self.assertEqual(observer.attachments, ())
-        self.assertIn(
-            ResourceKind.NETWORK_OBSERVER_CONTAINER,
-            {resource.kind for resource in plan.ephemeral_resources},
-        )
-
-
-class _ObserverPodman:
+class _ServicePodman:
     engine = "podman"
+    timeout = 30.0
 
     def __init__(self) -> None:
         self.commands: list[tuple[str, ...]] = []
+        self.running = True
 
     def observe(self, argv, **kwargs):
+        del kwargs
         command = tuple(str(item) for item in argv)
         self.commands.append(command)
         return CommandResult(command, 0, "", "")
 
+    def exists(self, reference, kind):
+        del reference, kind
+        return True
 
-class NetworkObserverServiceTests(unittest.TestCase):
-    def test_observer_container_has_net_raw_only(self) -> None:
-        import tempfile
-        from asf.routed_allocation import RoutedSubnetAllocation
+    def inspect_container(self, reference, **kwargs):
+        del reference, kwargs
+        return SimpleNamespace(running=self.running)
 
-        manifest = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
-        manifest = replace(
-            manifest,
-            observability=replace(manifest.observability, network_activity=True),
-            network=replace(
-                manifest.network,
-                routed_rules=(RoutedRule(IPv4Network("192.0.2.10/32")),),
-            ),
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
-            (root / "agents").mkdir()
-            (root / ".devcontainer").mkdir()
-            paths = RepoPaths.for_root(root)
-            begin_observation_session(paths, manifest.name)
-            plan = build_runtime_plan(
-                manifest,
-                paths=paths,
-                owner_pid=4242,
-                broker_globally_enabled=False,
-                routed_subnets=RoutedSubnetAllocation(
-                    IPv4Network("10.76.1.0/24"),
-                    IPv4Network("10.77.1.0/24"),
-                    IPv4Network("10.79.1.0/24"),
-                ),
+    def container_logs(self, reference, *, tail):
+        del reference, tail
+        return CommandResult(("podman", "logs"), 0, "", "")
+
+
+class NetworkCaptureServiceTests(unittest.TestCase):
+    @patch.object(NetworkCaptureService, "_wait_ready")
+    def test_capture_uses_tcpdump_and_net_raw_only(self, wait_ready) -> None:
+        fake = _ServicePodman()
+        service = NetworkCaptureService(fake)
+        with tempfile.TemporaryDirectory() as temporary:
+            capture = Path(temporary) / "capture.pcap"
+            capture.touch()
+            service.start(
+                "routed-scanner",
+                "asf-gateway",
+                "gateway:test",
+                "asf-network-observer",
+                capture,
+                sandbox_label="asf.sandbox=/tmp/asf",
             )
-            fake = _ObserverPodman()
-            NetworkObserverService(fake).start(paths, plan, output=io.StringIO())
-            run = next(command for command in fake.commands if "run" in command)
-            self.assertIn("--cap-drop=ALL", run)
-            self.assertIn("--cap-add=NET_RAW", run)
-            self.assertNotIn("--cap-add=NET_ADMIN", run)
-            self.assertIn("--security-opt=no-new-privileges", run)
-            self.assertIn("--read-only", run)
-            gateway = plan.container(SessionRole.ROUTED_GATEWAY)
-            assert gateway is not None
-            self.assertIn(f"container:{gateway.name}", run)
-            log = paths.session_artifact(
-                manifest.name,
-                "observability",
-                begin_id := (root / ".devcontainer" / "sessions" / manifest.name / "observability" / "current").read_text().strip(),
-                "network-activity.jsonl",
+
+        run = fake.commands[-1]
+        self.assertIn("--network", run)
+        self.assertIn("container:asf-gateway", run)
+        self.assertIn("--cap-drop=ALL", run)
+        self.assertIn("--cap-add=NET_RAW", run)
+        self.assertNotIn("--cap-add=NET_ADMIN", run)
+        self.assertIn("--security-opt=no-new-privileges", run)
+        self.assertIn("--read-only", run)
+        self.assertIn("--stop-signal=SIGINT", run)
+        self.assertIn("tap0", run)
+        self.assertIn("256", run)
+        self.assertIn("200000", run)
+        self.assertIn("/asf/network.pcap", run)
+        self.assertIn("gateway:test", run)
+        self.assertIn("tcpdump", run)
+        self.assertNotIn("-Z", run)
+        wait_ready.assert_called_once_with("asf-network-observer")
+
+    def test_stop_is_graceful_before_removal(self) -> None:
+        fake = _ServicePodman()
+        NetworkCaptureService(fake).stop("observer")
+        self.assertEqual(fake.commands[0][1:4], ("stop", "--ignore", "--time"))
+        self.assertEqual(fake.commands[1], ("podman", "rm", "--ignore", "observer"))
+
+
+class CaptureCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name) / "asf"
+        root.mkdir()
+        (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        (root / ".devcontainer").mkdir()
+        runtime = root / "agents" / "routed-scanner"
+        runtime.mkdir(parents=True)
+        (runtime / "runtime.yml").write_text("name: routed-scanner\n", encoding="utf-8")
+        self.paths = RepoPaths.for_root(root)
+        self.observation = begin_run(self.paths, "routed-scanner")
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def _session(self, *, observer=None):
+        gateway = SimpleNamespace(
+            name="gateway",
+            is_running=True,
+            inspect=SimpleNamespace(image="gateway:test"),
+        )
+
+        def role(requested):
+            if requested is SessionRole.ROUTED_GATEWAY:
+                return gateway
+            if requested is SessionRole.NETWORK_OBSERVER:
+                return observer
+            return None
+
+        return SimpleNamespace(
+            status=SessionStatus.RUNNING,
+            lock=SimpleNamespace(pid=4242),
+            role=role,
+        )
+
+    def _discovery(self, session):
+        discovery = Mock()
+        discovery.resolve_runtime.return_value = "routed-scanner"
+        discovery.session.return_value = session
+        return discovery
+
+    @patch.object(NetworkCaptureService, "start")
+    @patch("asf.network_observer.read_run_policy")
+    @patch("asf.network_observer.SessionDiscovery.from_paths")
+    def test_start_creates_private_timestamped_capture(
+        self, from_paths, read_policy, start
+    ) -> None:
+        from_paths.return_value = self._discovery(self._session())
+        read_policy.return_value = SimpleNamespace(
+            isolation="microvm", network_mode="routed"
+        )
+
+        result = run_capture_command(
+            ("capture", "start", "routed-scanner"),
+            self.paths,
+            podman=Mock(),
+            require_available=False,
+        )
+
+        captures = tuple(self.observation.directory.glob("network-*.pcap"))
+        self.assertEqual(len(captures), 1)
+        self.assertEqual(os.stat(captures[0]).st_mode & 0o777, 0o600)
+        self.assertIn(captures[0].name, result.stdout)
+        args = start.call_args.args
+        self.assertEqual(args[0], "routed-scanner")
+        self.assertEqual(args[1], "gateway")
+        self.assertEqual(args[2], "gateway:test")
+        self.assertEqual(args[4], captures[0])
+
+    @patch.object(NetworkCaptureService, "start")
+    @patch("asf.network_observer.read_run_policy")
+    @patch("asf.network_observer.SessionDiscovery.from_paths")
+    def test_repeated_starts_use_distinct_files(self, from_paths, read_policy, start) -> None:
+        from_paths.return_value = self._discovery(self._session())
+        read_policy.return_value = SimpleNamespace(
+            isolation="microvm", network_mode="routed"
+        )
+        with patch("asf.network_observer.datetime") as clock:
+            clock.now.return_value = SimpleNamespace(
+                strftime=lambda _: "20260825T220733Z"
             )
-            self.assertEqual(os.stat(log).st_mode & 0o777, 0o600)
-
-
-class PacketParserTests(unittest.TestCase):
-    def test_records_tcp_syn_udp_and_icmp_echo_only_from_guest(self) -> None:
-        guest = "10.203.1.2"
-        target = "192.0.2.10"
-        tcp = bytearray(20)
-        tcp[:4] = struct.pack("!HH", 50123, 22)
-        tcp[13] = 0x02
+            run_capture_command(
+                ("capture", "start", "routed-scanner"),
+                self.paths,
+                podman=Mock(),
+                require_available=False,
+            )
+            run_capture_command(
+                ("capture", "start", "routed-scanner"),
+                self.paths,
+                podman=Mock(),
+                require_available=False,
+            )
+        names = sorted(path.name for path in self.observation.directory.glob("*.pcap"))
         self.assertEqual(
-            parse_frame(_frame(guest, target, 6, bytes(tcp)), guest),
-            {
-                "source": guest,
-                "destination": target,
-                "protocol": "tcp",
-                "source_port": 50123,
-                "destination_port": 22,
-            },
+            names,
+            ["network-20260825T220733Z-2.pcap", "network-20260825T220733Z.pcap"],
         )
 
-        udp = struct.pack("!HHHH", 50124, 53, 8, 0)
-        self.assertEqual(parse_frame(_frame(guest, target, 17, udp), guest)["protocol"], "udp")
-        self.assertEqual(
-            parse_frame(_frame(guest, target, 1, bytes([8, 0]) + b"\x00" * 6), guest)["protocol"],
-            "icmp_echo",
+    @patch.object(NetworkCaptureService, "stop")
+    @patch("asf.network_observer.read_run_policy")
+    @patch("asf.network_observer.SessionDiscovery.from_paths")
+    def test_stop_is_idempotent(self, from_paths, read_policy, stop) -> None:
+        read_policy.return_value = SimpleNamespace(
+            isolation="microvm", network_mode="routed"
         )
-
-        tcp[13] = 0x12  # SYN/ACK reply-like traffic is not an attempt.
-        self.assertIsNone(parse_frame(_frame(guest, target, 6, bytes(tcp)), guest))
-        self.assertIsNone(parse_frame(_frame("10.203.1.1", guest, 17, udp), guest))
-        self.assertIsNone(parse_frame(_frame(guest, target, 17, udp), guest, target))
-
-    def test_non_initial_ipv4_fragments_are_ignored(self) -> None:
-        frame = bytearray(_frame("10.203.1.2", "192.0.2.10", 17, b"\x00" * 8))
-        frame[20:22] = struct.pack("!H", 1)  # fragment offset = 1
-        self.assertIsNone(parse_frame(bytes(frame), "10.203.1.2"))
-
-    def test_network_log_stops_at_fixed_per_session_limit(self) -> None:
-        output = io.StringIO()
-        line = '{"event":"network_attempt","padding":"' + ("x" * 128) + '"}\n'
-        truncated = '{"event":"network_activity_truncated"}\n'
-        written, reached = _bounded_write(
-            output,
-            line,
-            truncated,
-            MAX_LOG_BYTES - len(truncated.encode("utf-8")),
+        from_paths.return_value = self._discovery(self._session())
+        result = run_capture_command(
+            ("capture", "stop", "routed-scanner"),
+            self.paths,
+            podman=Mock(),
+            require_available=False,
         )
-        self.assertTrue(reached)
-        self.assertEqual(output.getvalue(), truncated)
-        self.assertEqual(written, MAX_LOG_BYTES)
+        self.assertEqual(result.stdout, "Packet capture is not running.\n")
+        stop.assert_not_called()
+
+    @patch("asf.network_observer.read_run_policy")
+    @patch("asf.network_observer.SessionDiscovery.from_paths")
+    def test_capture_requires_routed_microvm(self, from_paths, read_policy) -> None:
+        from_paths.return_value = self._discovery(self._session())
+        read_policy.return_value = SimpleNamespace(
+            isolation="container", network_mode="routed"
+        )
+        with self.assertRaisesRegex(NetworkCaptureError, "requires a routed microVM"):
+            run_capture_command(
+                ("capture", "start", "routed-scanner"),
+                self.paths,
+                podman=Mock(),
+                require_available=False,
+            )
 
 
 if __name__ == "__main__":

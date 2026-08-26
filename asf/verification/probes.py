@@ -441,7 +441,7 @@ def _validate_http_url(value: object) -> str:
         hostname = parsed.hostname
         username = parsed.username
         password = parsed.password
-        parsed.port
+        _ = parsed.port  # raises ValueError for an out-of-range port
     except ValueError as exc:
         raise ProbeValidationError("proxy URL is malformed") from exc
     if parsed.scheme.lower() != "http":

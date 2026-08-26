@@ -1,6 +1,7 @@
 # Observability
 
-ASF observes from the host, outside the untrusted guest.
+ASF keeps observability outside the untrusted guest and limits it to boundaries
+that ASF already controls.
 
 ## Snapshot
 
@@ -9,29 +10,44 @@ ASF observes from the host, outside the untrusted guest.
 ```
 
 It shows the current run ID, declared guest boundary, host-side process
-capabilities, recent lifecycle events, broker metadata, prompt-capture status,
-and optional routed network attempts.
+capabilities, recent lifecycle events, broker request metadata, prompt-capture
+status, and the status/path of any routed PCAP captures.
+
+ASF does not try to reconstruct normal command execution inside a container or
+microVM.
 
 ## Per-run files
 
-Each `open` gets a new private directory:
+Each `open` mints one session id and one private directory that holds every
+host-side artifact for that run:
 
 ```text
-.devcontainer/sessions/<agent>/observability/<session-id>/
-  policy.json
-  events.jsonl
-  broker-requests.jsonl
-  llm-prompts.jsonl        # only when enabled
-  network-activity.jsonl   # only when enabled
+.devcontainer/sessions/<agent>/runs/<session-id>/
+  policy.json               frozen isolation/network/capability policy
+  events.jsonl              lifecycle events
+  verification-report.json  startup verification verdicts
+  cleanup-report.json       teardown actions and outcomes
+  broker-requests.jsonl     LiteLLM request metadata (broker sessions)
+  llm-prompts.jsonl         only when prompt capture is enabled
+  egress-metadata.json      proxy mode: Caddy evidence bookkeeping
+  egress-summary.json       proxy mode: CONNECT summary written at teardown
+  caddy/                    proxy mode: raw Caddy access logs
+  network-<timestamp>.pcap  one file per on-demand capture
 ```
 
-`observability/current` contains the latest run ID. Directories are mode `0700`;
-files and the current pointer are mode `0600`. Previous runs are retained.
+`runs/current` names the latest session id. Directories are mode `0700`; files
+and the pointer are mode `0600`. The newest 12 runs are kept; older ones are
+removed when the next session starts. `runtime-plan.json` and
+`egress-history.json` stay at the session level because they outlive a run.
+
+Caddy is bind-mounted only on the `caddy/` subdirectory, and LiteLLM only on
+its two `.jsonl` files; neither container can reach the rest of the run.
 
 `policy.json` freezes the non-secret isolation/network/capability policy at
 session start. `observe` reads this snapshot rather than the editable
-`runtime.yml`, so changing a manifest cannot reclassify a running session's
-historical activity.
+`runtime.yml`. Fields read back from `events.jsonl` and
+`broker-requests.jsonl` are escaped before display; a log line can never drive
+the operator's terminal.
 
 ## Lifecycle events
 
@@ -41,7 +57,8 @@ historical activity.
 session_start
 broker_started
 gateway_ready
-network_observer_ready
+network_capture_started
+network_capture_stopped
 broker_ready
 runtime_starting
 cleanup_started
@@ -70,33 +87,40 @@ prompt bodies.
 Prompt logs may contain system prompts, source code, secrets, tool data, or
 personal data. LiteLLM's general message logging remains disabled.
 
-## Optional routed network activity
+## On-demand routed packet capture
 
-For TAP-backed routed microVM sessions:
+Packet capture is explicit and only available for a running TAP-backed routed
+microVM session:
 
-```yaml
-observability:
-  network_activity: true
+```bash
+./sandbox.sh capture start [agent]
+# run the task you want to observe
+./sandbox.sh capture stop [agent]
 ```
 
-ASF starts a separate observer sharing the routed gateway network namespace.
-The observer has `NET_RAW` only; the long-lived gateway remains capability-less.
-It records guest-originated IPv4 attempts only:
+Each `start` creates a new private timestamped PCAP such as
+`network-20260825T220733Z.pcap`. Starting capture never restarts or changes the
+running microVM. Stopping capture sends `SIGINT` to `tcpdump` before removing
+the helper so the PCAP is finalized cleanly. Repeating `start`/`stop` creates
+additional files rather than overwriting earlier evidence.
 
-- TCP initial SYN packets
-- UDP datagrams
-- ICMP echo requests
+ASF runs `tcpdump` in a separate container sharing the routed gateway network
+namespace. It captures `tap0` with `NET_RAW` only; the long-lived gateway
+remains capability-less and the guest receives no additional capability.
 
-No packet payloads or response packets are stored. LiteLLM broker traffic is
-excluded because broker requests have their own metadata stream. Records go to
-the current run's `network-activity.jsonl`. The file is capped at 64 MiB per
-run; once the cap is reached ASF records a truncation marker when space permits
-and stops collecting additional packet metadata for that run.
+The capture uses a 256-byte snapshot length and stops after 200,000 packets,
+which bounds host disk use for an unattended capture. ASF does not parse,
+classify, deduplicate, or reinterpret packet contents. `observe` reports only
+whether capture is active, how many PCAPs exist, the latest/current file and a
+`tcpdump -r` command. Use `tcpdump` or Wireshark for packet analysis.
 
-`observe` also shows `policy-match=allow|deny`, derived from the frozen
-session-start routed policy. This is not an observed nftables verdict.
-Enforcement remains unchanged.
-The observer is operational telemetry, not lossless forensic packet capture.
+The PCAP is sensitive evidence. It can contain packet payloads and, when broker
+traffic traverses the TAP, broker traffic as well. Treat the session directory
+accordingly.
+
+Packet capture is evidence, not enforcement. Routed nftables policy remains the
+authoritative traffic-control mechanism. A capture failure does not stop the
+running agent session.
 
 ## Existing logs
 

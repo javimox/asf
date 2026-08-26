@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: "Moreno"
     given-names: "Javier"
-version: 1.0
-date-released: 2026-08-01
+version: 2.0
+date-released: 2026-08-26
 abstract: >-
   A fail-closed framework for running AI coding agents in isolated rootless
   Podman containers, combining no-gateway network topology, generated and

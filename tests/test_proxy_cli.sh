@@ -31,16 +31,18 @@ esac
 EOF
 chmod +x "$TMP/bin/podman"
 
-EVIDENCE_DIR="$TMP/asf/.devcontainer/sessions/claude/evidence/test-session"
-mkdir -p "$EVIDENCE_DIR"
-printf '%s\n' '{"request":{"method":"CONNECT","host":"github.com:443"}}' > "$EVIDENCE_DIR/caddy-access.jsonl"
-cat > "$TMP/asf/.devcontainer/sessions/claude/egress-current.json" <<EOF
+RUN_ID="20260803T000000Z-0badcafe"
+RUN_DIR="$TMP/asf/.devcontainer/sessions/claude/runs/$RUN_ID"
+mkdir -p "$RUN_DIR/caddy"
+printf '%s\n' "$RUN_ID" > "$TMP/asf/.devcontainer/sessions/claude/runs/current"
+printf '%s\n' '{"request":{"method":"CONNECT","host":"github.com:443"}}' > "$RUN_DIR/caddy/caddy-access.jsonl"
+cat > "$RUN_DIR/egress-metadata.json" <<EOF
 {
   "active": true,
   "allowlisted_domains": ["github.com"],
-  "directory": ".devcontainer/sessions/claude/evidence/test-session",
+  "directory": ".devcontainer/sessions/claude/runs/$RUN_ID/caddy",
   "runtime": "claude",
-  "session_id": "test-session",
+  "session_id": "$RUN_ID",
   "started_at": "2026-08-03T00:00:00Z"
 }
 EOF

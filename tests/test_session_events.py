@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asf.observation_sessions import begin_observation_session, observation_artifact
+from asf.runs import begin_run, run_artifact
 from asf.paths import RepoPaths
 from asf.session_events import read_session_events, record_session_event
 
@@ -20,7 +20,7 @@ class SessionEventTests(unittest.TestCase):
             (root / "agents").mkdir()
             (root / ".devcontainer").mkdir()
             paths = RepoPaths.for_root(root)
-            session = begin_observation_session(paths, "hermes")
+            session = begin_run(paths, "hermes")
 
             record_session_event(paths, "hermes", "session_start")
             record_session_event(paths, "hermes", "broker_ready")
@@ -31,7 +31,7 @@ class SessionEventTests(unittest.TestCase):
                 disposition="stopped",
             )
 
-            path = observation_artifact(paths, "hermes", "events.jsonl")
+            path = run_artifact(paths, "hermes", "events.jsonl")
             self.assertEqual(path.parent.name, session.session_id)
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             records = read_session_events(paths, "hermes", limit=2)

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .observation_sessions import current_observation_session, observation_artifact
+from .runs import current_run, run_artifact
 from .paths import RepoPaths
 
 __all__ = ["record_session_event", "read_session_events"]
@@ -23,10 +23,10 @@ def record_session_event(
     """Append one best-effort lifecycle event without affecting enforcement."""
 
     try:
-        session = current_observation_session(paths, runtime)
+        session = current_run(paths, runtime)
         if session is None:
             return
-        path = observation_artifact(paths, runtime, "events.jsonl")
+        path = run_artifact(paths, runtime, "events.jsonl")
         payload = {
             **fields,
             "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -60,7 +60,7 @@ def read_session_events(
     if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
         raise ValueError("event limit must be a positive integer")
     try:
-        path: Path = observation_artifact(paths, runtime, "events.jsonl")
+        path: Path = run_artifact(paths, runtime, "events.jsonl")
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return ()

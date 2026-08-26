@@ -14,6 +14,7 @@ from unittest import mock
 from asf.cleanup import CleanupExecutor
 from asf.cli import main
 from asf.egress_evidence import begin_egress_session, mark_egress_session_active
+from asf.runs import begin_run
 from asf.identity import ResourceIdentity
 from asf.paths import RepoPaths
 from asf.podman import (
@@ -257,6 +258,7 @@ class StopCommandTests(unittest.TestCase):
         )
 
     def test_successful_stop_records_current_egress_evidence(self) -> None:
+        begin_run(self.paths, "claude")
         context = begin_egress_session(self.paths, "claude", ("sentry.io",))
         mark_egress_session_active(self.paths, "claude")
         context.access_log_path.write_text(
@@ -295,7 +297,7 @@ class StopCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("Egress evidence recorded", result.stdout)
         self.assertIn("(1 agent CONNECT; 1 denied)", result.stdout)
-        summary = context.directory / "summary.json"
+        summary = context.metadata_path.parent / "egress-summary.json"
         self.assertTrue(summary.is_file())
         self.assertEqual(
             json.loads(summary.read_text(encoding="utf-8"))["denied_connects"],

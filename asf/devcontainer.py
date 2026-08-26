@@ -8,11 +8,9 @@ membership.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
-import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,7 +44,6 @@ __all__ = [
     "load_base",
     "load_build_request",
     "load_request",
-    "main",
     "reanchor_build_paths",
     "write_atomic",
 ]
@@ -574,73 +571,3 @@ def _generated_destination(plan: RuntimePlan, kind: GeneratedFileKind) -> Path:
             f"runtime plan must contain exactly one {kind.value} destination"
         )
     return matches[0]
-
-
-def _proxy_port(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("proxy port must be an integer") from exc
-    if not 1 <= parsed <= 65535:
-        raise argparse.ArgumentTypeError("proxy port must be between 1 and 65535")
-    return parsed
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", required=True)
-    parser.add_argument("--runtime", required=True)
-    parser.add_argument(
-        "--build-only",
-        action="store_true",
-        help="render a config for devcontainer build without opening a session",
-    )
-    parser.add_argument("--repo", action="append", default=[])
-    parser.add_argument("--run-arg", action="append", default=[])
-    parser.add_argument("--build-arg", action="append", default=[])
-    parser.add_argument("--ssh-agent-socket", default="")
-    parser.add_argument("--proxy-port", type=_proxy_port, default=_DEFAULT_PROXY_PORT)
-    parser.add_argument("--broker-default-model", default="")
-    args = parser.parse_args(argv)
-
-    try:
-        if args.build_only:
-            build_request = load_build_request(
-                root=args.root,
-                runtime=args.runtime,
-                repositories=args.repo,
-                run_arguments=args.run_arg,
-                build_arguments=args.build_arg,
-                ssh_agent_socket=args.ssh_agent_socket or None,
-            )
-            cfg = build_build_config(build_request)
-            write_atomic(build_request.output_path, cfg)
-        else:
-            request = load_request(
-                root=args.root,
-                runtime=args.runtime,
-                repositories=args.repo,
-                run_arguments=args.run_arg,
-                build_arguments=args.build_arg,
-                ssh_agent_socket=args.ssh_agent_socket or None,
-                proxy_port=args.proxy_port,
-                broker_default_model=args.broker_default_model,
-            )
-            expected_output = _generated_destination(
-                request.plan, GeneratedFileKind.DEVCONTAINER
-            )
-            lexical_output = request.paths.identity.config_json(request.plan.runtime)
-            if expected_output != lexical_output:
-                raise DevcontainerError(
-                    "runtime plan Dev Container destination does not match checkout identity"
-                )
-            cfg = build_devcontainer_config(request)
-            write_atomic(request.output_path, cfg)
-    except (ConfigurationError, ValidationError, OSError, ValueError) as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

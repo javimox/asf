@@ -36,7 +36,7 @@ def import_observer(log_path: Path, *, prompt_path: Path | None = None, prompts:
             "ASF_LLM_PROMPT_LOG",
             "ASF_LLM_PROMPTS",
             "LITELLM_AGENT",
-            "ASF_OBSERVATION_SESSION_ID",
+            "ASF_SESSION_ID",
             "ASF_LITELLM_PROVIDER",
         )
     }
@@ -47,7 +47,7 @@ def import_observer(log_path: Path, *, prompt_path: Path | None = None, prompts:
     else:
         os.environ.pop("ASF_LLM_PROMPT_LOG", None)
     os.environ["LITELLM_AGENT"] = "hermes"
-    os.environ["ASF_OBSERVATION_SESSION_ID"] = "20260821T225127Z-deadbeef"
+    os.environ["ASF_SESSION_ID"] = "20260821T225127Z-deadbeef"
     os.environ["ASF_LITELLM_PROVIDER"] = "openai"
     sys.modules["litellm"] = litellm
     sys.modules["litellm.integrations"] = integrations

@@ -80,11 +80,8 @@ for value in ("tinyproxy", "g3proxy"):
 PY
 
 production_test="$ROOT/tests/test_caddy_proxy_paths.sh"
-experiment="$ROOT/tests/experiments/compare-tinyproxy-caddy.sh"
 grep -q 'python3 -m asf.proxy image-info --field tag' "$production_test"
 grep -q 'python3 -m asf.proxy format-file' "$production_test"
-grep -q 'Comparative evidence only' "$experiment"
-grep -q 'TINY_IMAGE=' "$experiment"
 if grep -q 'tinyproxy' "$ROOT/tests/run-host.sh"; then
     echo "default host suite still runs Tinyproxy" >&2
     exit 1

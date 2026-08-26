@@ -180,7 +180,7 @@ class SessionLockManager:
             if existing is not None and (
                 existing.owner_alive or existing.being_claimed
             ):
-                raise SessionAlreadyRunningError(runtime, existing.pid)
+                raise SessionAlreadyRunningError(runtime, existing.pid) from None
             return self._replace_stale(runtime, path, pid)
         except OSError as exc:
             raise SessionLockAcquireError(
@@ -369,7 +369,7 @@ class SessionLockManager:
                 return self._identity.session_lock(runtime)
             raise SessionLockAcquireError(
                 f"missing ASF session directory: {parent}"
-            )
+            ) from None
         except OSError as exc:
             raise SessionLockAcquireError(
                 f"cannot prepare ASF session directory {parent}: {exc}"

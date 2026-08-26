@@ -29,7 +29,7 @@ def _dockerfile_instructions(text: str) -> tuple[str, ...]:
     return tuple(instructions)
 
 
-class ProxyParityTests(unittest.TestCase):
+class ProxyReferenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.vectors = json.loads(FIXTURE.read_text(encoding="utf-8"))

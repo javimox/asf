@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run independent parity files concurrently without interleaving their output.
+# Run independent reference-output files concurrently without interleaving their output.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -18,12 +18,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for path in "$ROOT"/tests/parity/test_*.py; do
+for path in "$ROOT"/tests/reference/test_*.py; do
     name=$(basename "$path" .py)
     names+=("$name")
     (
         cd "$ROOT"
-        PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v "tests.parity.${name}"
+        PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v "tests.reference.${name}"
     ) >"$TMP/${name}.log" 2>&1 &
     pids+=("$!")
 done

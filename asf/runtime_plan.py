@@ -7,11 +7,9 @@ returns a deterministic plan that the runtime services execute.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import tempfile
-import sys
 from dataclasses import dataclass
 from enum import Enum
 from ipaddress import (
@@ -24,12 +22,11 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .errors import ConfigurationError, ValidationError
-from .identity import ResourceIdentity, validate_runtime_name
-from .manifest import load_model
+from .identity import ResourceIdentity, state_volume_names, validate_runtime_name
 from .models import RuntimeManifest
 from .ownership import Resource, ResourceKind
 from .paths import RepoPaths
-from .reset import state_volume_names
+from .schema import Schema
 from .session import SessionRole
 
 __all__ = [
@@ -50,7 +47,6 @@ __all__ = [
     "build_runtime_plan",
     "load_runtime_plan",
     "read_runtime_plan",
-    "main",
     "routed_broker_address",
     "runtime_plan_path",
     "validate_runtime_plan_context",
@@ -425,7 +421,6 @@ def build_runtime_plan(
         scan_router = _fixed_address(routed_subnets.scan, 2)
         runtime_scan = _fixed_address(routed_subnets.scan, 10)
         egress_gateway = _fixed_address(routed_subnets.egress, 1)
-        egress_router = _fixed_address(routed_subnets.egress, 2)
         routes = tuple(
             NetworkRoute(destination, scan_router)
             for destination in _routed_route_destinations(manifest)
@@ -527,15 +522,6 @@ def build_runtime_plan(
                 ),
             )
         )
-        if manifest.observability.network_activity:
-            support.append(
-                ContainerPlan(
-                    SessionRole.NETWORK_OBSERVER,
-                    identity.ephemeral_container(runtime, "network-observer", owner_pid),
-                    network_namespace_of=gateway_name,
-                    capabilities=frozenset({"net_raw"}),
-                )
-            )
 
     volume_names = state_volume_names(identity, runtime, manifest)
     volume_targets = tuple(entry.target for entry in manifest.state_volumes) + (
@@ -908,71 +894,43 @@ def _parse_resource(payload: dict[str, Any]) -> Resource:
     )
 
 
+_schema = Schema(RuntimePlanError)
+
+
 def _require_exact_keys(
     payload: dict[str, Any], expected: set[str], context: str
 ) -> None:
-    actual = set(payload)
-    if actual != expected:
-        missing = sorted(expected - actual)
-        unknown = sorted(actual - expected)
-        details = []
-        if missing:
-            details.append("missing " + ", ".join(missing))
-        if unknown:
-            details.append("unknown " + ", ".join(unknown))
-        raise RuntimePlanError(f"invalid {context} fields: {'; '.join(details)}")
+    _schema.exact_keys(payload, expected, context)
 
 
 def _require_text(payload: dict[str, Any], key: str, context: str) -> str:
-    value = payload[key]
-    if not isinstance(value, str):
-        raise RuntimePlanError(f"{context} {key} must be text")
-    return value
+    return _schema.text(payload[key], f"{context} {key}")
 
 
 def _require_int(payload: dict[str, Any], key: str, context: str) -> int:
-    value = payload[key]
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise RuntimePlanError(f"{context} {key} must be an integer")
-    return value
+    return _schema.integer(payload[key], f"{context} {key}")
 
 
 def _require_bool(payload: dict[str, Any], key: str, context: str) -> bool:
-    value = payload[key]
-    if not isinstance(value, bool):
-        raise RuntimePlanError(f"{context} {key} must be boolean")
-    return value
+    return _schema.boolean(payload[key], f"{context} {key}")
 
 
 def _require_mapping(
     payload: dict[str, Any], key: str, context: str
 ) -> dict[str, Any]:
-    value = payload[key]
-    if not isinstance(value, dict):
-        raise RuntimePlanError(f"{context} {key} must be an object")
-    if not all(isinstance(item, str) for item in value):
-        raise RuntimePlanError(f"{context} {key} keys must be text")
-    return value
+    return dict(_schema.mapping(payload[key], f"{context} {key}"))
 
 
 def _require_text_list(
     payload: dict[str, Any], key: str, context: str
 ) -> list[str]:
-    value = payload[key]
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise RuntimePlanError(f"{context} {key} must be a list of text values")
-    return value
+    return _schema.text_list(payload[key], f"{context} {key}")
 
 
 def _require_mapping_list(
     payload: dict[str, Any], key: str, context: str
 ) -> list[dict[str, Any]]:
-    value = payload[key]
-    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
-        raise RuntimePlanError(f"{context} {key} must be a list of objects")
-    if any(not all(isinstance(name, str) for name in item) for item in value):
-        raise RuntimePlanError(f"{context} {key} object keys must be text")
-    return value
+    return [dict(item) for item in _schema.mapping_list(payload[key], f"{context} {key}")]
 
 
 load_runtime_plan = read_runtime_plan
@@ -1111,7 +1069,13 @@ def _validate_runtime_plan(plan: RuntimePlan) -> None:
     if len(network_names) != len(set(network_names)):
         raise RuntimePlanError("planned network names must be unique")
 
-    network_by_name = {network.name: network for network in plan.networks}
+    _validate_plan_networks(plan)
+    _validate_plan_attachments(plan)
+    _validate_plan_capabilities(plan)
+    _validate_plan_resources(plan)
+
+
+def _validate_plan_networks(plan: RuntimePlan) -> None:
     for network in plan.networks:
         should_be_internal = network.role in {
             NetworkRole.INTERNAL,
@@ -1139,6 +1103,9 @@ def _validate_runtime_plan(plan: RuntimePlan) -> None:
                     f"route gateway {route.gateway} is outside network {network.name}"
                 )
 
+
+def _validate_plan_attachments(plan: RuntimePlan) -> None:
+    network_by_name = {network.name: network for network in plan.networks}
     used_addresses: set[tuple[str, IPv4Address]] = set()
     external_roles = {
         NetworkRole.EGRESS,
@@ -1174,6 +1141,8 @@ def _validate_runtime_plan(plan: RuntimePlan) -> None:
                     )
                 used_addresses.add(key)
 
+
+def _validate_plan_capabilities(plan: RuntimePlan) -> None:
     runtime_caps = {value.lower() for value in plan.runtime_container.capabilities}
     if "net_admin" in runtime_caps:
         raise RuntimePlanError("NET_ADMIN is never permitted on the runtime container")
@@ -1182,6 +1151,8 @@ def _validate_runtime_plan(plan: RuntimePlan) -> None:
         if "net_admin" in caps and container.role is not SessionRole.ROUTED_INIT:
             raise RuntimePlanError("only the short-lived routed initializer may use NET_ADMIN")
 
+
+def _validate_plan_resources(plan: RuntimePlan) -> None:
     resource_keys = [(item.kind, item.name) for item in plan.ephemeral_resources]
     if len(resource_keys) != len(set(resource_keys)):
         raise RuntimePlanError("planned ephemeral resources must be unique")
@@ -1238,51 +1209,3 @@ def _network_dict(network: NetworkPlan) -> dict[str, Any]:
             for route in network.routes
         ],
     }
-
-
-def _bool_text(value: str) -> bool:
-    if value == "true":
-        return True
-    if value == "false":
-        return False
-    raise argparse.ArgumentTypeError("expected true or false")
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", required=True)
-    parser.add_argument("--runtime", required=True)
-    parser.add_argument("--owner-pid", required=True, type=int)
-    parser.add_argument("--broker-enabled", required=True, type=_bool_text)
-    parser.add_argument("--routed-subnet", action="append", default=[])
-    parser.add_argument("--output", type=Path)
-    parser.add_argument("--stdout", action="store_true")
-    args = parser.parse_args(argv)
-
-    try:
-        paths = RepoPaths.for_root(args.root)
-        manifest = load_model(paths.identity.runtime_manifest(args.runtime))
-        routed = (
-            RoutedSubnetAllocation.parse(args.routed_subnet)
-            if args.routed_subnet
-            else None
-        )
-        plan = build_runtime_plan(
-            manifest,
-            paths=paths,
-            owner_pid=args.owner_pid,
-            broker_globally_enabled=args.broker_enabled,
-            routed_subnets=routed,
-        )
-        if args.stdout:
-            print(json.dumps(plan.to_dict(), indent=2, sort_keys=True))
-        else:
-            write_runtime_plan(plan, args.output)
-    except (ConfigurationError, ValidationError, OSError, ValueError) as exc:
-        print(f"runtime planning failed: {exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

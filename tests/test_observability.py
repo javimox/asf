@@ -17,7 +17,7 @@ from asf.broker_metadata import prepare_broker_request_log
 from asf.cli import main
 from asf.manifest import load_model
 from asf.observability import run_observe_command
-from asf.observation_sessions import begin_observation_session, write_observation_policy
+from asf.runs import begin_run, write_run_policy
 from asf.paths import RepoPaths
 from asf.podman import PodmanClient
 from asf.process import CommandResult
@@ -39,7 +39,7 @@ runtime:
 network:
   mode: routed
   allow:
-    - cidr: 192.168.252.2/32
+    - cidr: 192.0.2.10/32
 capabilities: [net_raw]
 llm:
   broker: true
@@ -67,8 +67,9 @@ def inspection(container_id: str, name: str, role: str, pid: int) -> str:
 
 
 class ObserveRunner:
-    def __init__(self) -> None:
+    def __init__(self, *, network_observer: bool = False) -> None:
         self.calls: list[tuple[str, ...]] = []
+        self.network_observer = network_observer
 
     def __call__(
         self,
@@ -95,6 +96,8 @@ class ObserveRunner:
                 stdout = "gateway-id\n"
             elif "asf.role=routed-init" in joined:
                 stdout = ""
+            elif "asf.role=network-observer" in joined:
+                stdout = "observer-id\n" if self.network_observer else ""
         elif command[:3] == ("inspect", "--type", "container"):
             reference = command[3]
             if reference == "runtime-id":
@@ -103,6 +106,8 @@ class ObserveRunner:
                 stdout = inspection(reference, "hermes-broker", "broker", 102)
             elif reference == "gateway-id":
                 stdout = inspection(reference, "hermes-gateway", "routed-gateway", 103)
+            elif reference == "observer-id":
+                stdout = inspection(reference, "hermes-capture", "network-observer", 104)
             else:
                 returncode = 125
                 stderr = "Error: no such container\n"
@@ -118,7 +123,7 @@ class ObserveTests(unittest.TestCase):
         root = Path(self.temporary.name) / "asf"
         root.mkdir()
         self.paths = make_checkout(root)
-        self.observation = begin_observation_session(self.paths, "hermes")
+        self.observation = begin_run(self.paths, "hermes")
         self._snapshot_policy()
         self.runner = ObserveRunner()
         self.podman = PodmanClient(engine="/bin/true", runner=self.runner)
@@ -139,7 +144,7 @@ class ObserveTests(unittest.TestCase):
                 IPv4Network("10.79.1.0/24"),
             ),
         )
-        write_observation_policy(self.paths, plan, manifest)
+        write_run_policy(self.paths, plan, manifest)
 
     @patch("asf.observability._read_proc_status")
     def test_observe_reports_policy_and_host_boundary(self, read_status) -> None:
@@ -167,7 +172,7 @@ class ObserveTests(unittest.TestCase):
         self.assertIn("isolation: microvm", result.stdout)
         self.assertIn("network:   routed", result.stdout)
         self.assertIn("capabilities: net_raw", result.stdout)
-        self.assertIn("192.168.252.2/32 all IP traffic", result.stdout)
+        self.assertIn("192.0.2.10/32 all IP traffic", result.stdout)
         self.assertIn("runtime/VMM", result.stdout)
         self.assertIn("LiteLLM broker", result.stdout)
         self.assertIn("routed gateway", result.stdout)
@@ -207,6 +212,98 @@ class ObserveTests(unittest.TestCase):
         self.assertNotIn("prompt contents", result.stdout)
 
     @patch("asf.observability._read_proc_status")
+    def test_observe_reports_on_demand_capture_files(self, read_status) -> None:
+        read_status.return_value = {
+            "CapEff": "0000000000000000",
+            "CapBnd": "0000000000000000",
+            "NoNewPrivs": "1",
+        }
+        first = self.observation.directory / "network-20260825T220733Z.pcap"
+        latest = self.observation.directory / "network-20260825T221418Z.pcap"
+        first.write_bytes(b"\xd4\xc3\xb2\xa1" + b"\x00" * 20)
+        latest.write_bytes(b"\xd4\xc3\xb2\xa1" + b"\x00" * 2044)
+        os.chmod(first, 0o600)
+        os.chmod(latest, 0o600)
+
+        result = run_observe_command(
+            ("observe", "hermes"),
+            self.paths,
+            podman=self.podman,
+            require_available=False,
+        )
+
+        self.assertIn("network capture", result.stdout)
+        self.assertIn("status:   inactive", result.stdout)
+        self.assertIn("captures: 2", result.stdout)
+        self.assertIn("network-20260825T221418Z.pcap (2.0 KiB)", result.stdout)
+        self.assertIn("tcpdump -nn -r", result.stdout)
+        self.assertNotIn("recent network activity", result.stdout)
+        self.assertNotIn("policy-match=", result.stdout)
+
+    @patch("asf.observability._read_proc_status")
+    def test_observe_reports_active_capture(self, read_status) -> None:
+        read_status.return_value = {
+            "CapEff": "0000000000002000",
+            "CapBnd": "0000000000002000",
+            "NoNewPrivs": "1",
+        }
+        capture = self.observation.directory / "network-20260825T220733Z.pcap"
+        capture.write_bytes(b"\xd4\xc3\xb2\xa1" + b"\x00" * 20)
+        podman = PodmanClient(
+            engine="/bin/true", runner=ObserveRunner(network_observer=True)
+        )
+
+        result = run_observe_command(
+            ("observe", "hermes"),
+            self.paths,
+            podman=podman,
+            require_available=False,
+        )
+
+        self.assertIn("packet capture", result.stdout)
+        self.assertIn("caps=net_raw", result.stdout)
+        self.assertIn("status:   active", result.stdout)
+        self.assertIn("current:", result.stdout)
+        self.assertIn(capture.name, result.stdout)
+
+    @patch("asf.observability._read_proc_status")
+    def test_observe_escapes_control_characters_from_log_fields(self, read_status) -> None:
+        read_status.return_value = {
+            "CapEff": "0000000000000000",
+            "CapBnd": "0000000000000000",
+            "NoNewPrivs": "1",
+        }
+        broker_log = prepare_broker_request_log(self.paths, "hermes")
+        broker_log.write_text(
+            '{"event":"llm_request_failed","model":"gpt\\u001b[31mRED\\u001b[0m\\n",'
+            '"ts":"2026-08-21T21:00:00+00:00"}\n',
+            encoding="utf-8",
+        )
+        result = run_observe_command(
+            ("observe", "hermes"),
+            self.paths,
+            podman=self.podman,
+            require_available=False,
+        )
+        self.assertNotIn("\x1b", result.stdout)
+        self.assertIn("model=gpt\\x1b[31mRED\\x1b[0m\\x0a", result.stdout)
+
+    @patch("asf.observability._read_proc_status")
+    def test_observe_decodes_capability_masks(self, read_status) -> None:
+        read_status.return_value = {
+            "CapEff": "0000000000003000",
+            "CapBnd": "0000000000003000",
+            "NoNewPrivs": "1",
+        }
+        result = run_observe_command(
+            ("observe", "hermes"),
+            self.paths,
+            podman=self.podman,
+            require_available=False,
+        )
+        self.assertIn("caps=net_admin,net_raw", result.stdout)
+
+    @patch("asf.observability._read_proc_status")
     def test_observe_uses_frozen_policy_not_edited_manifest(self, read_status) -> None:
         read_status.return_value = {
             "CapEff": "0000000000000000",
@@ -237,7 +334,7 @@ llm:
         self.assertIn("isolation: microvm", result.stdout)
         self.assertIn("network:   routed", result.stdout)
         self.assertIn("broker:    enabled", result.stdout)
-        self.assertIn("192.168.252.2/32 all IP traffic", result.stdout)
+        self.assertIn("192.0.2.10/32 all IP traffic", result.stdout)
 
     @patch("asf.observability._read_proc_status")
     def test_cli_exposes_observe(self, read_status) -> None:

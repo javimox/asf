@@ -49,8 +49,6 @@ network:
 observability:
   # Requires llm.broker: true; stores full broker-visible prompts (0600).
   llm_prompts: false
-  # routed+microvm only; records passive TAP metadata, no packet payloads.
-  network_activity: false
 
 # Optional runtime capabilities (default: none).
 # NET_RAW is only needed for raw-socket scans (for example SYN scans or OS

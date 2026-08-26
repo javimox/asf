@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .observation_sessions import observation_artifact
+from .runs import run_artifact
 from .paths import RepoPaths
 
 __all__ = [
@@ -18,7 +18,7 @@ __all__ = [
 
 
 def _prepare_log(paths: RepoPaths, runtime: str, name: str) -> Path:
-    path = observation_artifact(paths, runtime, name)
+    path = run_artifact(paths, runtime, name)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
@@ -51,7 +51,7 @@ def read_broker_requests(
     if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
         raise ValueError("request limit must be a positive integer")
     try:
-        path = observation_artifact(paths, runtime, "broker-requests.jsonl")
+        path = run_artifact(paths, runtime, "broker-requests.jsonl")
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return ()

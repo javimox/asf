@@ -11,7 +11,7 @@ from asf.broker_metadata import (
     prepare_broker_request_log,
     read_broker_requests,
 )
-from asf.observation_sessions import begin_observation_session
+from asf.runs import begin_run
 from asf.paths import RepoPaths
 
 
@@ -28,7 +28,7 @@ class BrokerMetadataTests(unittest.TestCase):
             root = Path(temporary) / "asf"
             root.mkdir()
             paths = make_paths(root)
-            begin_observation_session(paths, "hermes")
+            begin_run(paths, "hermes")
             path = prepare_broker_request_log(paths, "hermes")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             rows = [
@@ -48,7 +48,7 @@ class BrokerMetadataTests(unittest.TestCase):
             root = Path(temporary) / "asf"
             root.mkdir()
             paths = make_paths(root)
-            begin_observation_session(paths, "hermes")
+            begin_run(paths, "hermes")
             path = prepare_broker_prompt_log(paths, "hermes")
             self.assertEqual(path.name, "llm-prompts.jsonl")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)

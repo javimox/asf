@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "description": "Golden resource-identity vectors for asf.identity. Every value was cross-checked against the Bash implementation when generated; the file outlives Bash and pins the naming contract permanently.",
+  "description": "Reference resource-identity vectors for asf.identity. Every value was cross-checked against the Bash implementation when generated; the file outlives Bash and pins the naming contract permanently.",
   "generated_from": "ASF v49 lib/common.sh, lib/network.sh, lib/runtime.sh",
   "notes": [
     "is_podman_safe has no Bash equivalent; it records whether the prefix would be accepted by Podman and by the Dev Container renderer.",
-    "owner_pid is arbitrary in golden vectors. During dual implementation, both sides must receive the same top-level session-owner PID.",
+    "owner_pid is arbitrary in reference vectors. During dual implementation, both sides must receive the same top-level session-owner PID.",
     "Paths with undecodable bytes cannot be represented in JSON and are covered only by the Bash differential test.",
     "Regenerate or verify the differential vectors on macOS before trusting BSD tr and APFS path parity."
   ],

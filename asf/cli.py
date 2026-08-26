@@ -11,6 +11,7 @@ from .diagnostics import DiagnosticResult, run_diagnostic_command
 from .egress_evidence import run_advise_command
 from .errors import AsfError
 from .observability import run_observe_command
+from .network_observer import run_capture_command
 from .maintenance import run_maintenance_command
 from .paths import RepoPaths
 from .podman import PodmanClient, PodmanUnavailableError
@@ -20,7 +21,7 @@ from .repositories import (
     RepositoryStore,
     run_repository_command,
 )
-from .reset import ResetCommandResult, run_reset_command
+from .reset import run_reset_command
 from .runtime import run_runtime_command
 from .security_test import SecurityTestResult, run_security_test_command
 from .session import SessionDiscovery, SessionStatus
@@ -30,14 +31,14 @@ from .version import __version__
 __all__ = ["main"]
 
 _REPOSITORY_COMMANDS = frozenset({"repo", "repository"})
-_SESSION_COMMANDS = frozenset({"ls", "observe"})
+_SESSION_COMMANDS = frozenset({"ls", "observe", "capture"})
 _DIAGNOSTIC_COMMANDS = frozenset({"proxy", "broker"})
 _LIFECYCLE_COMMANDS = frozenset({"stop", "reset", "open", "shell"})
 _EVIDENCE_COMMANDS = frozenset({"advise"})
 _MAINTENANCE_COMMANDS = frozenset({"build", "scan"})
 _USAGE = (
     "Usage: python3 -m asf "
-    "{open|shell|ls|observe|repo|repository|build|scan|proxy|broker|test|advise|stop|reset} "
+    "{open|shell|ls|observe|capture|repo|repository|build|scan|proxy|broker|test|advise|stop|reset} "
     "[argument]\n"
 )
 _PODMAN_NOT_FOUND = (
@@ -51,11 +52,47 @@ _PODMAN_NOT_FOUND = (
 )
 ReplaceProcess = Callable[[Sequence[str]], NoReturn]
 
+# Commands whose handlers share the plain (arguments, paths, podman, out, err)
+# shape. Streaming commands (test, stop) and process-replacing ones (open,
+# shell) keep explicit branches in main().
+_DISPATCH: dict[str, Callable[..., object]] = {
+    **{
+        name: (lambda a, p, _pod, _out, _err: _run_repository(a, p))
+        for name in _REPOSITORY_COMMANDS
+    },
+    "ls": lambda a, p, pod, _out, _err: _run_session_list(a, p, pod),
+    "observe": lambda a, p, pod, _out, _err: run_observe_command(
+        a, p, podman=pod, require_available=True
+    ),
+    "capture": lambda a, p, pod, _out, _err: run_capture_command(
+        a, p, podman=pod, require_available=True
+    ),
+    **{
+        name: (
+            lambda a, p, pod, _out, _err: run_diagnostic_command(
+                a, p, podman=pod, require_available=True
+            )
+        )
+        for name in _DIAGNOSTIC_COMMANDS
+    },
+    **{
+        name: (
+            lambda a, p, pod, out, err: run_maintenance_command(
+                a, p, podman=pod, output=out, error=err
+            )
+        )
+        for name in _MAINTENANCE_COMMANDS
+    },
+    "advise": lambda a, p, _pod, _out, _err: run_advise_command(a, p),
+}
+
 _HELP = """
   ./sandbox.sh open <agent>        start a sandbox session
   ./sandbox.sh shell [agent]       attach to a running agent session
   ./sandbox.sh ls                  show running and deployed agent sessions
   ./sandbox.sh observe [agent]     show host-side session and privilege state
+  ./sandbox.sh capture start [agent]  start routed microVM packet capture
+  ./sandbox.sh capture stop [agent]   stop packet capture and finalize the PCAP
   ./sandbox.sh stop [agent]        stop one session, or all of them
   ./sandbox.sh broker status [agent]        LiteLLM status and exposed models
   ./sandbox.sh broker logs [-f] [agent]     show or follow LiteLLM logs
@@ -130,30 +167,22 @@ def main(
 
     try:
         paths = RepoPaths.discover() if root is None else RepoPaths.for_root(root)
-        if arguments[0] in _REPOSITORY_COMMANDS:
-            result = _run_repository(arguments, paths)
-        elif arguments[0] == "ls":
-            result = _run_session_list(arguments, paths, podman)
-        elif arguments[0] == "observe":
-            result = run_observe_command(
-                arguments, paths, podman=podman, require_available=True
-            )
-        elif arguments[0] in _DIAGNOSTIC_COMMANDS:
-            result = run_diagnostic_command(
-                arguments,
-                paths,
-                podman=podman,
-                require_available=True,
-            )
-        elif arguments[0] in _MAINTENANCE_COMMANDS:
-            result = run_maintenance_command(
-                arguments,
-                paths,
-                podman=podman,
-                output=output,
-                error=errors,
-            )
-        elif arguments[0] == "test":
+        command = arguments[0]
+        if command in _LIFECYCLE_COMMANDS and command != "stop":
+            if command == "reset":
+                result = run_reset_command(
+                    arguments, paths, podman=podman, require_available=True
+                )
+            else:
+                return run_runtime_command(
+                    arguments,
+                    paths,
+                    podman=podman,
+                    output=output,
+                    error=errors,
+                    replace_process=replace_process,
+                )
+        elif command == "test":
             security_streamed = True
             result = run_security_test_command(
                 arguments,
@@ -162,9 +191,7 @@ def main(
                 require_available=True,
                 event_sink=emit_event,
             )
-        elif arguments[0] == "advise":
-            result = run_advise_command(arguments, paths)
-        elif arguments[0] == "stop":
+        elif command == "stop":
             stop_streamed = True
             result = run_stop_command(
                 arguments,
@@ -173,22 +200,8 @@ def main(
                 require_available=True,
                 event_sink=emit_event,
             )
-        elif arguments[0] in {"open", "shell"}:
-            return run_runtime_command(
-                arguments,
-                paths,
-                podman=podman,
-                output=output,
-                error=errors,
-                replace_process=replace_process,
-            )
         else:
-            result = run_reset_command(
-                arguments,
-                paths,
-                podman=podman,
-                require_available=True,
-            )
+            result = _DISPATCH[command](arguments, paths, podman, output, errors)
     except BrokenPipeError:
         return 0
     except KeyboardInterrupt:

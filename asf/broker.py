@@ -12,7 +12,6 @@ their own modules (:mod:`asf.networks`, :mod:`asf.runtime`, :mod:`asf.routed`).
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import secrets as stdlib_secrets
@@ -23,13 +22,13 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Mapping, Sequence, TextIO
+from typing import Callable, Mapping, TextIO
 
 from .broker_metadata import prepare_broker_prompt_log, prepare_broker_request_log
 from .errors import ConfigurationError, InfrastructureError, ValidationError
 from .manifest import load_model
 from .models import LlmSettings, RuntimeManifest
-from .observation_sessions import current_observation_session, observation_artifact
+from .runs import current_run, run_artifact
 from .ownership import ResourceKind
 from .paths import RepoPaths
 from .podman import ContainerState, PodmanClient
@@ -60,7 +59,6 @@ __all__ = [
     "describe_lines",
     "generate_session_token",
     "load_request",
-    "main",
     "prepare_models",
     "provider_api_key_name",
     "provider_direct_domain",
@@ -305,30 +303,16 @@ class BrokerRequest:
 
     @property
     def request_log_path(self) -> Path:
-        session = current_observation_session(self.paths, self.plan.runtime)
-        if session is None:
-            return self.paths.session_artifact(
-                self.plan.runtime, "broker-requests.jsonl"
-            )
-        return observation_artifact(
-            self.paths, self.plan.runtime, "broker-requests.jsonl"
-        )
+        return run_artifact(self.paths, self.plan.runtime, "broker-requests.jsonl")
 
     @property
     def prompt_log_path(self) -> Path:
-        session = current_observation_session(self.paths, self.plan.runtime)
-        if session is None:
-            return self.paths.session_artifact(
-                self.plan.runtime, "llm-prompts.jsonl"
-            )
-        return observation_artifact(
-            self.paths, self.plan.runtime, "llm-prompts.jsonl"
-        )
+        return run_artifact(self.paths, self.plan.runtime, "llm-prompts.jsonl")
 
     @property
-    def observation_session_id(self) -> str:
-        session = current_observation_session(self.paths, self.plan.runtime)
-        return "" if session is None else session.session_id
+    def session_id(self) -> str:
+        run = current_run(self.paths, self.plan.runtime)
+        return "" if run is None else run.session_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -563,7 +547,7 @@ class BrokerService:
                 "-e",
                 f"LITELLM_AGENT={request.plan.runtime}",
                 "-e",
-                f"ASF_OBSERVATION_SESSION_ID={request.observation_session_id}",
+                f"ASF_SESSION_ID={request.session_id}",
                 "-e",
                 f"ASF_LITELLM_PROVIDER={request.provider}",
                 "-e",
@@ -899,62 +883,3 @@ def generate_session_token() -> SecretValue:
     """Return a fresh opaque 64-character hexadecimal broker session token."""
 
     return SecretValue(stdlib_secrets.token_hex(32))
-
-
-def _parse_bool(value: str) -> bool:
-    if value == "true":
-        return True
-    if value == "false":
-        return False
-    raise argparse.ArgumentTypeError("value must be true or false")
-
-
-def _add_request_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--root", required=True)
-    parser.add_argument("--runtime", required=True)
-    parser.add_argument("--image", required=True)
-    parser.add_argument("--startup-timeout", type=int, default=60)
-    parser.add_argument("--detailed-debug", type=_parse_bool, default=False)
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python3 -m asf.broker")
-    sub = parser.add_subparsers(dest="action", required=True)
-    sub.add_parser("token")
-    for action in ("describe", "start", "wait"):
-        command = sub.add_parser(action)
-        _add_request_arguments(command)
-    return parser
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    namespace = _parser().parse_args(sys.argv[1:] if argv is None else argv)
-    try:
-        if namespace.action == "token":
-            print(generate_session_token().reveal())
-            return 0
-        request = load_request(
-            namespace.root,
-            namespace.runtime,
-            image=namespace.image,
-            startup_timeout=namespace.startup_timeout,
-            detailed_debug=namespace.detailed_debug,
-        )
-        if namespace.action == "describe":
-            print("\n".join(describe_lines(request)))
-            return 0
-        if namespace.action == "start":
-            raw_token = os.environ.get("ASF_BROKER_TOKEN", "")
-            if not raw_token:
-                raise BrokerError("ASF_BROKER_TOKEN is required to start LiteLLM")
-            BrokerService().start(request, SecretValue(raw_token))
-            return 0
-        BrokerService().wait_ready(request)
-        return 0
-    except (ConfigurationError, InfrastructureError) as exc:
-        print(f"\033[0;31m{exc}\033[0m", file=sys.stderr)
-        return exc.exit_code
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

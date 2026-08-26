@@ -458,10 +458,10 @@ class CleanupExecutor:
             ResourceKind.RUNTIME_CONTAINER,
             ResourceKind.BROKER_CONTAINER,
             ResourceKind.PROXY_CONTAINER,
-            ResourceKind.NETWORK_OBSERVER_CONTAINER,
         }:
             return self._remove_container(resource)
         if kind in {
+            ResourceKind.NETWORK_OBSERVER_CONTAINER,
             ResourceKind.GATEWAY_INIT_CONTAINER,
             ResourceKind.GATEWAY_CONTAINER,
         }:

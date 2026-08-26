@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from asf.cleanup import CleanupExecutor, CleanupOutcome, CleanupReport
+from asf.cleanup import CleanupReport
 from asf.ownership import Resource, ResourceKind
 from asf.paths import RepoPaths
 from asf.podman import PodmanClient

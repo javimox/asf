@@ -181,7 +181,7 @@ set -e
 [[ "$status" -ne 0 ]]
 grep -q 'No running claude container' <<< "$output"
 ! grep -q 'Traceback' <<< "$output"
-[[ -f "$TMP/asf/tests/parity/security_test_vectors.json" ]]
+[[ -f "$TMP/asf/tests/reference/security_test_vectors.json" ]]
 
 # The final launcher must enter Python without sourcing production libraries.
 cp "$TMP/asf/sandbox.sh" "$TMP/asf/sandbox-no-libs.sh"

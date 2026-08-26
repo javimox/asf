@@ -75,34 +75,34 @@ class RoutedRulesTests(unittest.TestCase):
 
     def test_separate_blocked_probe_is_nat_only(self) -> None:
         output = render_routed_policy(
-            (RoutedRule(IPv4Network("192.168.252.2/32")),),
+            (RoutedRule(IPv4Network("192.0.2.10/32")),),
             IPv4Address("10.203.10.10"),
             "scan0",
             "egress0",
-            blocked_probe_address=IPv4Address("192.168.252.3"),
+            blocked_probe_address=IPv4Address("192.0.2.11"),
         )
         self.assertIn(
-            "ip saddr 10.203.10.10 ip daddr 192.168.252.3/32 masquerade",
+            "ip saddr 10.203.10.10 ip daddr 192.0.2.11/32 masquerade",
             output,
         )
-        self.assertNotIn("ip daddr 192.168.252.3/32 accept", output)
+        self.assertNotIn("ip daddr 192.0.2.11/32 accept", output)
 
     def test_blocked_probe_inside_allowed_destination_does_not_duplicate_nat(self) -> None:
         output = render_routed_policy(
-            (RoutedRule(IPv4Network("192.168.252.2/32"), "tcp", (18080,)),),
+            (RoutedRule(IPv4Network("192.0.2.10/32"), "tcp", (18080,)),),
             IPv4Address("10.203.10.10"),
             "scan0",
             "egress0",
-            blocked_probe_address=IPv4Address("192.168.252.2"),
+            blocked_probe_address=IPv4Address("192.0.2.10"),
         )
         self.assertEqual(
-            output.count("ip saddr 10.203.10.10 ip daddr 192.168.252.2/32 masquerade"),
+            output.count("ip saddr 10.203.10.10 ip daddr 192.0.2.10/32 masquerade"),
             1,
         )
 
     def test_routed_tap_broker_is_limited_to_tcp_4000(self) -> None:
         output = render_routed_policy(
-            (RoutedRule(IPv4Network("192.168.252.2/32")),),
+            (RoutedRule(IPv4Network("192.0.2.10/32")),),
             IPv4Address("10.77.40.10"),
             "scan0",
             "egress0",

@@ -240,7 +240,6 @@ class KrunBackendTests(unittest.TestCase):
 
     def test_build_argv_uses_the_existing_agent_dockerfile(self) -> None:
         argv = build_krun_build_argv(self.request)
-        joined = " ".join(argv)
         self.assertEqual(argv[:2], ("podman", "build"))
         self.assertIn(str(ROOT / ".devcontainer" / "Dockerfile"), argv)
         self.assertIn("AGENT=claude", argv)

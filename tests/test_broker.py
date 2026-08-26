@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -30,7 +29,7 @@ from asf.broker import (
 )
 from asf.errors import ConfigurationError, InfrastructureError, ValidationError
 from asf.manifest import load_model
-from asf.observation_sessions import begin_observation_session
+from asf.runs import begin_run
 from asf.paths import RepoPaths
 from asf.podman import PodmanClient
 from asf.process import CommandResult, SensitiveArgument
@@ -142,7 +141,7 @@ class BrokerTestBase(unittest.TestCase):
         self.tempdir.cleanup()
 
     def begin_observation(self) -> None:
-        begin_observation_session(self.paths, "claude")
+        begin_run(self.paths, "claude")
 
     def request(
         self,
@@ -440,6 +439,7 @@ class BrokerLifecycleTests(BrokerTestBase):
         )
 
     def test_public_command_builders_preserve_the_broker_boundary(self) -> None:
+        self.begin_observation()
         request = self.request()
         service = self.service(RecordingRunner())
         secret_argv = service.secret_create_argv(request)
@@ -494,6 +494,7 @@ class BrokerLifecycleTests(BrokerTestBase):
         self.assertIn("health/liveliness", readiness[-1])
 
     def test_prompt_capture_mount_is_opt_in(self) -> None:
+        self.begin_observation()
         self.manifest = replace(
             self.manifest,
             observability=replace(self.manifest.observability, llm_prompts=True),
@@ -513,12 +514,12 @@ class BrokerLifecycleTests(BrokerTestBase):
         )
 
     def test_routed_krun_broker_joins_scan_at_planned_fixed_ip(self) -> None:
-        paths = RepoPaths.for_root(ROOT)
-        hermes = load_model(ROOT / "agents" / "hermes" / "runtime.yml")
+        self.begin_observation()
+        paths = self.paths
         routed = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")
         manifest = replace(
-            hermes,
-            runtime=replace(hermes.runtime, isolation="microvm"),
+            self.manifest,
+            runtime=replace(self.manifest.runtime, isolation="microvm"),
             network=routed.network,
             capabilities=frozenset({"net_raw"}),
         )

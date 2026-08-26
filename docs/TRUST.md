@@ -70,7 +70,7 @@ capability-less by default.
   request to a non-443 port on an allowlisted host.
 
   Caddy is the only proxy accepted by the production lifecycle. tinyproxy and
-  g3proxy remain in dedicated comparison spikes; selecting either through
+  g3proxy remain in comparison spikes on the `research-spikes` branch; selecting either through
   `PROXY_IMPL` aborts startup rather than weakening the security claim.
 - **A misconfigured proxy going unnoticed.** Before the agent starts, ASF
   runs a compact critical-path verification from a throwaway container: an
@@ -101,15 +101,16 @@ capability-less by default.
 - **Leftovers.** Runtime and support containers, networks, routed reservation,
   and the temporary provider secret are removed on exit; only declared state
   volumes persist. Generated session configuration remains under
-  `.devcontainer/sessions/` for diagnostics and deterministic reuse,
-  together with the per-session evidence records: `runtime-plan.json`
-  (the immutable topology), `verification-report.json` (every startup
-  policy check, its verdict, and whether it was blocking), and
-  `cleanup-report.json` (every teardown action and its outcome). The
+  `.devcontainer/sessions/` for diagnostics and deterministic reuse:
+  `runtime-plan.json` (the immutable topology) at the session level, and
+  under `runs/<session-id>/` the per-run records `policy.json`,
+  `events.jsonl`, `verification-report.json` (every startup policy check,
+  its verdict, and whether it was blocking), and `cleanup-report.json`
+  (every teardown action and its outcome). The
   records are redaction-safe diagnostics; writing them can never change
   a security or cleanup verdict. With `CADDY_ACCESS_LOGS=true`, proxy sessions
   additionally retain bounded Caddy request metadata and a counted
-  `summary.json`. Sensitive credential headers are redacted by Caddy, but host,
+  `egress-summary.json`. Sensitive credential headers are redacted by Caddy, but host,
   method, timing, and other request metadata remain visible; disable the option
   where that retention is inappropriate. Compact summaries cover the latest
   100 completed proxy sessions; raw logs are retained only for the latest 12.

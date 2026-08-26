@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from ipaddress import IPv4Network
 from pathlib import Path
-from typing import Callable, NoReturn, Sequence, TextIO
+from typing import Callable, NamedTuple, NoReturn, Sequence, TextIO
 
 from .atomic import write_text_atomic
 from .broker import (
@@ -50,8 +50,6 @@ from .krun import (
 )
 from .models import RuntimeManifest
 from .networks import NetworkService
-from .network_observer import NetworkObserverService
-from .observation_sessions import begin_observation_session, write_observation_policy
 from .open_lifecycle import (
     OpenCleanupService,
     OpenSignal,
@@ -80,7 +78,9 @@ from .runtime_plan import (
     validate_runtime_plan_context,
     write_runtime_plan,
 )
-from .session import SessionDiscovery, SessionRole, SessionStatus
+from .runs import begin_run, run_artifact, write_run_policy
+from .secrets import SecretValue
+from .session import SessionDiscovery, SessionRole
 from .session_lock import SessionAlreadyRunningError
 from .session_events import record_session_event
 from .stop import (
@@ -640,6 +640,15 @@ class StartupVerifier:
         return image
 
 
+class _SupportServices(NamedTuple):
+    """What ``open`` starts before the agent workload itself."""
+
+    token: SecretValue | None
+    broker: BrokerRequest | None
+    proxy: ProxyRequest | None
+    routed: RoutedRequest | None
+
+
 @dataclass(slots=True)
 class RuntimeService:
     paths: RepoPaths
@@ -650,7 +659,6 @@ class RuntimeService:
     broker_service: BrokerService | None = None
     network_service: NetworkService | None = None
     routed_service: RoutedService | None = None
-    network_observer_service: NetworkObserverService | None = None
     routed_allocator: RoutedAllocator | None = None
     verifier: StartupVerifier | None = None
 
@@ -663,9 +671,6 @@ class RuntimeService:
         self.broker_service = self.broker_service or BrokerService(self.podman)
         self.network_service = self.network_service or NetworkService(self.podman)
         self.routed_service = self.routed_service or RoutedService(self.podman)
-        self.network_observer_service = (
-            self.network_observer_service or NetworkObserverService(self.podman)
-        )
         self.routed_allocator = self.routed_allocator or RoutedAllocator(self.podman)
         self.verifier = self.verifier or StartupVerifier(self.podman)
 
@@ -705,10 +710,6 @@ class RuntimeService:
         cleanup = OpenCleanupService(stop_service)
         cleanup_completed = False
         received_signal: OpenSignal | None = None
-        token = None
-        broker_request: BrokerRequest | None = None
-        proxy_request: ProxyRequest | None = None
-        routed_request: RoutedRequest | None = None
         try:
             with _startup_signals() as signal_state:
                 if previous is not None and previous.is_stale:
@@ -717,7 +718,7 @@ class RuntimeService:
                         f"(PID {previous.pid or 'unknown'} is gone){_RESET}\n"
                     )
                 self._clear_previous_resources(runtime, stop_service)
-                begin_observation_session(self.paths, runtime)
+                begin_run(self.paths, runtime)
                 record_session_event(
                     self.paths,
                     runtime,
@@ -733,191 +734,35 @@ class RuntimeService:
                 plan = self._build_and_create_plan(
                     manifest, config, owner_pid, broker_enabled
                 )
-                write_observation_policy(self.paths, plan, manifest)
-
-                if broker_enabled:
-                    broker_request = BrokerRequest(
-                        self.paths,
-                        manifest,
-                        plan,
-                        BrokerSettings(
-                            config.broker_image,
-                            config.broker_startup_timeout,
-                            config.broker_detailed_debug,
-                        ),
-                    )
-                    token = generate_session_token()
-                    assert self.broker_service is not None
-                    self.broker_service.start(
-                        broker_request,
-                        token,
-                        output=self.output,
-                        error=self.error,
-                    )
-                    record_session_event(self.paths, runtime, "broker_started")
-
-                if manifest.network.mode == "proxy":
-                    proxy_request = ProxyRequest(
-                        self.paths,
-                        manifest,
-                        plan,
-                        access_logs=config.caddy_access_logs,
-                    )
-                    assert self.proxy_service is not None
-                    self.proxy_service.start(proxy_request, output=self.output)
-
-                if manifest.network.mode == "routed":
-                    routed_request = RoutedRequest(
-                        manifest,
-                        plan,
-                        allow_persistent_net_admin=(
-                            config.routed_allow_persistent_net_admin
-                        ),
-                    )
-                    assert self.routed_service is not None
-                    self.routed_service.start(routed_request, output=self.output)
-                    record_session_event(self.paths, runtime, "gateway_ready")
-                    if manifest.observability.network_activity:
-                        assert self.network_observer_service is not None
-                        self.network_observer_service.start(
-                            self.paths, plan, output=self.output
-                        )
-                        record_session_event(
-                            self.paths, runtime, "network_observer_ready"
-                        )
-
-                if manifest.network.mode == "isolated" and broker_request is not None:
-                    assert self.broker_service is not None
-                    self.broker_service.wait_ready(
-                        broker_request,
-                        output=self.output,
-                        error=self.error,
-                    )
-                    record_session_event(self.paths, runtime, "broker_ready")
-
+                write_run_policy(self.paths, plan, manifest)
+                support = self._start_support_services(
+                    manifest, config, plan, broker_enabled
+                )
                 assert self.verifier is not None
                 self.verifier.verify(
                     plan,
                     manifest,
-                    proxy=proxy_request,
-                    broker=broker_request,
-                    routed=routed_request,
+                    proxy=support.proxy,
+                    broker=support.broker,
+                    routed=support.routed,
                     output=self.output,
-                    report_path=self.paths.session_artifact(
-                        manifest.name, "verification-report.json"
+                    report_path=run_artifact(
+                        self.paths, manifest.name, "verification-report.json"
                     ),
                 )
-                session_environment: dict[str, str] | None = None
                 if manifest.runtime.isolation == "microvm":
-                    repositories = self._load_repositories(manifest)
-                    krun_request = KrunRequest(
-                        self.paths,
-                        plan,
-                        manifest,
-                        repositories=repositories,
-                        run_arguments=config.hardening_arguments(manifest),
-                        build_arguments=config.build_arguments(),
-                        proxy_port=PROXY_PORT,
-                        broker_default_model=(
-                            broker_request.models.default_model
-                            if broker_request is not None
-                            else ""
-                        ),
+                    child, session_environment = self._prepare_microvm(
+                        manifest, config, plan, support
                     )
-                    self._ensure_krun_image(krun_request)
-                    if (
-                        broker_request is not None
-                        and manifest.network.mode != "isolated"
-                    ):
-                        assert self.broker_service is not None
-                        self.broker_service.wait_ready(
-                            broker_request,
-                            output=self.output,
-                            error=self.error,
-                        )
-                        record_session_event(self.paths, runtime, "broker_ready")
-                    excluded = (
-                        provider_api_key_name(manifest)
-                        if broker_request is not None
-                        else ""
-                    )
-                    remote_environment = load_runtime_environment(
-                        plan,
-                        excluded_key=excluded,
-                        output=self.output,
-                        error=self.error,
-                    )
-                    session_environment = build_krun_environment(
-                        krun_request,
-                        broker_token=(token.reveal() if token is not None else ""),
-                        runtime_environment=remote_environment,
-                    )
-                    child = build_krun_run_argv(
-                        krun_request,
-                        session_environment,
-                        engine=os.fspath(self.podman.engine),
-                    )
-                    self.output.write(
-                        f"{_BLUE}Starting krun microVM...{_RESET}\n"
-                    )
-                    if plan.runtime_mode == "interactive":
-                        self.output.write(
-                            f"  {_DIM}Detach without stopping: "
-                            f"Ctrl-P, Ctrl-Q{_RESET}\n"
-                        )
-                    self.output.write("\n")
                 else:
-                    self._generate_devcontainer(
-                        plan,
-                        manifest,
-                        config,
-                        broker_request,
-                    )
-                    environment = {}
-                    if token is not None:
-                        environment["ASF_BROKER_TOKEN"] = token.reveal()
-                    self.output.write(f"{_BLUE}Starting container...{_RESET}\n")
-                    self.output.write(
-                        f"  {_DIM}(first run builds the image — takes ~1 min; "
-                        f"subsequent runs are fast){_RESET}\n\n"
-                    )
-                    self._start_devcontainer(plan, environment)
-                    if (
-                        broker_request is not None
-                        and manifest.network.mode != "isolated"
-                    ):
-                        assert self.broker_service is not None
-                        self.broker_service.wait_ready(
-                            broker_request,
-                            output=self.output,
-                            error=self.error,
-                        )
-                        record_session_event(self.paths, runtime, "broker_ready")
-
-                    excluded = (
-                        provider_api_key_name(manifest)
-                        if broker_request is not None
-                        else ""
-                    )
-                    remote_environment = load_runtime_environment(
-                        plan,
-                        excluded_key=excluded,
-                        output=self.output,
-                        error=self.error,
-                    )
-                    child = self._devcontainer_exec_argv(
-                        plan,
-                        remote_environment,
-                    )
+                    child = self._prepare_container(manifest, config, plan, support)
+                    session_environment = None
                 if plan.runtime_mode == "service":
                     self.output.write(
                         f"  {_DIM}running: {' '.join(plan.command)}{_RESET}\n"
                     )
-                if proxy_request is not None and proxy_request.access_logs:
+                if support.proxy is not None and support.proxy.access_logs:
                     mark_egress_session_active(self.paths, manifest.name)
-                # Container sessions already hold broker credentials after
-                # `devcontainer up`. krun sessions instead pass their complete
-                # environment to the initial foreground Podman process.
                 signal_state.disable()
                 record_session_event(self.paths, runtime, "runtime_starting")
                 result = run_open_session(
@@ -965,6 +810,165 @@ class RuntimeService:
                     )
         assert received_signal is not None
         return received_signal.exit_code
+
+    def _start_support_services(
+        self,
+        manifest: RuntimeManifest,
+        config: AsfConfig,
+        plan: RuntimePlan,
+        broker_enabled: bool,
+    ) -> _SupportServices:
+        """Start the broker, proxy and routed gateway the manifest asks for."""
+
+        runtime = manifest.name
+        token = None
+        broker_request: BrokerRequest | None = None
+        proxy_request: ProxyRequest | None = None
+        routed_request: RoutedRequest | None = None
+        if broker_enabled:
+            broker_request = BrokerRequest(
+                self.paths,
+                manifest,
+                plan,
+                BrokerSettings(
+                    config.broker_image,
+                    config.broker_startup_timeout,
+                    config.broker_detailed_debug,
+                ),
+            )
+            token = generate_session_token()
+            assert self.broker_service is not None
+            self.broker_service.start(
+                broker_request,
+                token,
+                output=self.output,
+                error=self.error,
+            )
+            record_session_event(self.paths, runtime, "broker_started")
+
+        if manifest.network.mode == "proxy":
+            proxy_request = ProxyRequest(
+                self.paths,
+                manifest,
+                plan,
+                access_logs=config.caddy_access_logs,
+            )
+            assert self.proxy_service is not None
+            self.proxy_service.start(proxy_request, output=self.output)
+
+        if manifest.network.mode == "routed":
+            routed_request = RoutedRequest(
+                manifest,
+                plan,
+                allow_persistent_net_admin=(
+                    config.routed_allow_persistent_net_admin
+                ),
+            )
+            assert self.routed_service is not None
+            self.routed_service.start(routed_request, output=self.output)
+            record_session_event(self.paths, runtime, "gateway_ready")
+
+        # Isolated mode has no runtime-side path to the broker, so readiness
+        # can only be proven before the runtime starts.
+        if manifest.network.mode == "isolated" and broker_request is not None:
+            self._wait_broker_ready(broker_request)
+
+        return _SupportServices(token, broker_request, proxy_request, routed_request)
+
+    def _wait_broker_ready(self, broker_request: BrokerRequest) -> None:
+        assert self.broker_service is not None
+        self.broker_service.wait_ready(
+            broker_request,
+            output=self.output,
+            error=self.error,
+        )
+        record_session_event(self.paths, broker_request.plan.runtime, "broker_ready")
+
+    def _runtime_environment(
+        self,
+        manifest: RuntimeManifest,
+        plan: RuntimePlan,
+        support: _SupportServices,
+    ) -> dict[str, str]:
+        """Load the agent environment, minus the provider key when brokered."""
+
+        if support.broker is not None and manifest.network.mode != "isolated":
+            self._wait_broker_ready(support.broker)
+        excluded = provider_api_key_name(manifest) if support.broker is not None else ""
+        return load_runtime_environment(
+            plan,
+            excluded_key=excluded,
+            output=self.output,
+            error=self.error,
+        )
+
+    def _prepare_microvm(
+        self,
+        manifest: RuntimeManifest,
+        config: AsfConfig,
+        plan: RuntimePlan,
+        support: _SupportServices,
+    ) -> tuple[Sequence[str], dict[str, str]]:
+        """Build the foreground ``podman run --runtime=krun`` command."""
+
+        krun_request = KrunRequest(
+            self.paths,
+            plan,
+            manifest,
+            repositories=self._load_repositories(manifest),
+            run_arguments=config.hardening_arguments(manifest),
+            build_arguments=config.build_arguments(),
+            proxy_port=PROXY_PORT,
+            broker_default_model=(
+                support.broker.models.default_model
+                if support.broker is not None
+                else ""
+            ),
+        )
+        self._ensure_krun_image(krun_request)
+        remote_environment = self._runtime_environment(manifest, plan, support)
+        # krun sessions pass their complete environment to the initial
+        # foreground Podman process; container sessions already hold broker
+        # credentials after `devcontainer up`.
+        session_environment = build_krun_environment(
+            krun_request,
+            broker_token=(support.token.reveal() if support.token is not None else ""),
+            runtime_environment=remote_environment,
+        )
+        child = build_krun_run_argv(
+            krun_request,
+            session_environment,
+            engine=os.fspath(self.podman.engine),
+        )
+        self.output.write(f"{_BLUE}Starting krun microVM...{_RESET}\n")
+        if plan.runtime_mode == "interactive":
+            self.output.write(
+                f"  {_DIM}Detach without stopping: Ctrl-P, Ctrl-Q{_RESET}\n"
+            )
+        self.output.write("\n")
+        return child, session_environment
+
+    def _prepare_container(
+        self,
+        manifest: RuntimeManifest,
+        config: AsfConfig,
+        plan: RuntimePlan,
+        support: _SupportServices,
+    ) -> Sequence[str]:
+        """Generate and start the Dev Container; return the exec command."""
+
+        self._generate_devcontainer(plan, manifest, config, support.broker)
+        environment = {}
+        if support.token is not None:
+            environment["ASF_BROKER_TOKEN"] = support.token.reveal()
+        self.output.write(f"{_BLUE}Starting container...{_RESET}\n")
+        self.output.write(
+            f"  {_DIM}(first run builds the image — takes ~1 min; "
+            f"subsequent runs are fast){_RESET}\n\n"
+        )
+        self._start_devcontainer(plan, environment)
+        remote_environment = self._runtime_environment(manifest, plan, support)
+        return self._devcontainer_exec_argv(plan, remote_environment)
 
     def _build_and_create_plan(
         self,

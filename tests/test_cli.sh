@@ -304,9 +304,11 @@ if grep -q 'Egress policy verified.*(allow,' <<< "$broken"; then
 fi
 grep -q 'devcontainer up' "$MOCK_LOG" \
     || { echo "agent container did not start after the advisory degradation" >&2; exit 1; }
-[[ -f "$TMP/asf/.devcontainer/sessions/claude/verification-report.json" ]] \
+runs="$TMP/asf/.devcontainer/sessions/claude/runs"
+report="$runs/$(cat "$runs/current")/verification-report.json"
+[[ -f "$report" ]] \
     || { echo "verification report was not persisted to the session directory" >&2; exit 1; }
-grep -q '"advisory": true' "$TMP/asf/.devcontainer/sessions/claude/verification-report.json" \
+grep -q '"advisory": true' "$report" \
     || { echo "persisted report does not record the advisory control" >&2; exit 1; }
 
 # Podman/timeout failures are infrastructure failures, not successful deny
