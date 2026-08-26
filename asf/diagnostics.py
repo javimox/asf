@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from .egress_evidence import EgressEvidenceError, current_egress_session
-from .errors import AsfError, InfrastructureError, UsageError
+from .errors import InfrastructureError, UsageError
 from .paths import RepoPaths
 from .podman import (
     ObjectKind,
     PodmanClient,
-    PodmanError,
     PodmanValidationError,
 )
 from .session import (

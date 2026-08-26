@@ -1,15 +1,15 @@
-"""Per-session Caddy evidence and conservative allowlist advice.
+"""Per-run Caddy evidence and conservative allowlist advice.
 
-Caddy writes JSON access records into one dedicated session evidence directory.
-At teardown ASF summarises CONNECT attempts, appends a bounded history record,
-and leaves both the raw JSONL and the summary available for audit.  Advice is
+Caddy writes JSON access records into the ``caddy/`` subdirectory of the
+current session run (see :mod:`asf.runs`); that subdirectory is the only path
+the proxy container can write to. At teardown ASF summarises CONNECT attempts
+into ``egress-summary.json`` and appends a bounded history record. Advice is
 read-only: it never edits a runtime manifest or weakens policy automatically.
 """
 
 from __future__ import annotations
 
 import json
-import secrets
 import shutil
 from collections import Counter
 from dataclasses import dataclass
@@ -22,9 +22,11 @@ from .atomic import write_text_atomic
 from .errors import ConfigurationError, ValidationError
 from .manifest import DOMAIN_RE, load_model
 from .paths import RepoPaths
+from .runs import SessionRun, current_run
 
 __all__ = [
     "ACCESS_LOG_CONTAINER_PATH",
+    "ACCESS_LOG_DIRNAME",
     "ADVICE_WINDOW",
     "EgressAdviceResult",
     "EgressEvidenceError",
@@ -41,14 +43,12 @@ __all__ = [
 ACCESS_LOG_FILENAME = "caddy-access.jsonl"
 ACCESS_LOG_PREFIX = "caddy-access"
 ACCESS_LOG_CONTAINER_PATH = f"/var/log/asf/{ACCESS_LOG_FILENAME}"
-_CURRENT_FILENAME = "egress-current.json"
+ACCESS_LOG_DIRNAME = "caddy"
 _HISTORY_FILENAME = "egress-history.json"
-_METADATA_FILENAME = "metadata.json"
-_SUMMARY_FILENAME = "summary.json"
-_EVIDENCE_DIRNAME = "evidence"
+_METADATA_FILENAME = "egress-metadata.json"
+_SUMMARY_FILENAME = "egress-summary.json"
 _MAX_HISTORY = 100
 ADVICE_WINDOW = 12
-_MAX_RAW_SESSIONS = ADVICE_WINDOW
 _MIN_DENIED_ATTEMPTS = 3
 _MIN_DENIED_SESSIONS = 2
 _PROBE_HEADER = "x-asf-probe"
@@ -152,7 +152,7 @@ def begin_egress_session(
     runtime: str,
     allowlisted_domains: Sequence[str],
 ) -> EgressSessionContext:
-    """Create one new dedicated evidence directory and current-session pointer."""
+    """Create the Caddy log directory and bookkeeping for the current run."""
 
     if not isinstance(paths, RepoPaths):
         raise TypeError("paths must be RepoPaths")
@@ -163,113 +163,117 @@ def begin_egress_session(
     ):
         raise ValidationError("egress evidence allowlist contains an invalid hostname")
 
-    now = _utc_now()
-    compact = now.replace("-", "").replace(":", "").replace(".", "")
-    session_id = f"{compact}-{secrets.token_hex(4)}"
-    current_path = paths.session_artifact(runtime, _CURRENT_FILENAME)
-    if current_path.exists() or current_path.is_symlink():
+    run = current_run(paths, runtime)
+    if run is None:
+        raise EgressEvidenceError(f"no session run to attach egress evidence to for {runtime}")
+    metadata_path = run.directory / _METADATA_FILENAME
+    if metadata_path.exists() or metadata_path.is_symlink():
         raise EgressEvidenceError(
-            f"unfinished egress evidence already exists for {runtime}; "
-            "recover it before starting"
+            f"egress evidence already exists for the current {runtime} run"
         )
-    evidence_root = paths.session_artifact(runtime, _EVIDENCE_DIRNAME)
-    if evidence_root.is_symlink():
-        raise EgressEvidenceError(
-            f"egress evidence root must not be a symlink: {evidence_root}"
-        )
-    evidence_root.mkdir(parents=True, mode=0o700, exist_ok=True)
-    directory = evidence_root / session_id
+    directory = run.directory / ACCESS_LOG_DIRNAME
     if directory.is_symlink():
-        raise EgressEvidenceError(
-            f"egress evidence directory must not be a symlink: {directory}"
-        )
+        raise EgressEvidenceError(f"Caddy log directory must not be a symlink: {directory}")
     directory.mkdir(mode=0o700, exist_ok=False)
-    access_log_path = directory / ACCESS_LOG_FILENAME
-    metadata_path = directory / _METADATA_FILENAME
     metadata = {
         "runtime": runtime,
-        "session_id": session_id,
-        "started_at": now,
+        "session_id": run.session_id,
+        "started_at": _utc_now(),
         "active": False,
         "allowlisted_domains": list(allowlisted),
         "directory": str(directory.relative_to(paths.root)),
     }
     _write_json(metadata_path, metadata)
-    _write_json(current_path, metadata)
-    return EgressSessionContext(
-        runtime, session_id, directory, access_log_path, metadata_path
-    )
+    return _context(paths, run, directory)
 
 
 def current_egress_session(
     paths: RepoPaths,
     runtime: str,
 ) -> EgressSessionContext | None:
-    """Return the validated current evidence context, when logging is active."""
+    """Return the current run's evidence context while logging is unfinished."""
 
-    current_path = paths.session_artifact(runtime, _CURRENT_FILENAME)
-    if not current_path.exists():
+    loaded = _load_unfinished(paths, runtime)
+    if loaded is None:
         return None
-    metadata = _read_json_object(current_path, required=True)
-    if _required_text(metadata, "runtime") != runtime:
-        raise EgressEvidenceError("egress evidence runtime does not match")
-    directory = _metadata_directory(paths, runtime, metadata)
-    session_id = _required_text(metadata, "session_id")
-    return EgressSessionContext(
-        runtime,
-        session_id,
-        directory,
-        directory / ACCESS_LOG_FILENAME,
-        directory / _METADATA_FILENAME,
-    )
+    run, metadata = loaded
+    return _context(paths, run, _metadata_directory(paths, run, metadata))
 
 
 def mark_egress_session_active(paths: RepoPaths, runtime: str) -> None:
-    """Mark the current proxy evidence as belonging to a started agent session."""
+    """Mark the current run's evidence as belonging to a started agent session."""
 
-    current_path = paths.session_artifact(runtime, _CURRENT_FILENAME)
-    metadata = _read_json_object(current_path, required=True)
-    if _required_text(metadata, "runtime") != runtime:
-        raise EgressEvidenceError("egress evidence runtime does not match")
+    loaded = _load_unfinished(paths, runtime)
+    if loaded is None:
+        raise EgressEvidenceError(f"no unfinished egress evidence for {runtime}")
+    run, metadata = loaded
     metadata["active"] = True
-    directory = _metadata_directory(paths, runtime, metadata)
-    _write_json(directory / _METADATA_FILENAME, metadata)
-    _write_json(current_path, metadata)
+    _write_json(run.directory / _METADATA_FILENAME, metadata)
 
 
 def finalize_egress_session(
     paths: RepoPaths,
     runtime: str,
 ) -> EgressSessionEvidence | None:
-    """Parse the current Caddy log and append one idempotent history record."""
+    """Parse the current run's Caddy log and append one idempotent history record."""
 
-    current_path = paths.session_artifact(runtime, _CURRENT_FILENAME)
-    if not current_path.exists():
+    loaded = _load_unfinished(paths, runtime)
+    if loaded is None:
         return None
-    metadata = _read_json_object(current_path, required=True)
-    if _required_text(metadata, "runtime") != runtime:
-        raise EgressEvidenceError("egress evidence runtime does not match")
-    directory = _metadata_directory(paths, runtime, metadata)
+    run, metadata = loaded
+    directory = _metadata_directory(paths, run, metadata)
     active = metadata.get("active")
     if not isinstance(active, bool):
         raise EgressEvidenceError("egress evidence active flag must be boolean")
 
     metadata["ended_at"] = _utc_now()
     if not active:
+        # Only startup probes could have reached Caddy; keep the bookkeeping,
+        # drop the raw log.
         metadata["state"] = "aborted-before-runtime-start"
-        _write_json(directory / _METADATA_FILENAME, metadata)
         shutil.rmtree(directory)
-        current_path.unlink(missing_ok=True)
+        _write_json(run.directory / _METADATA_FILENAME, metadata)
         return None
 
     evidence = _parse_access_logs(directory, metadata)
-    _write_json(directory / _SUMMARY_FILENAME, evidence.to_json_dict())
+    summary = run.directory / _SUMMARY_FILENAME
+    _write_json(summary, evidence.to_json_dict())
     _append_history(paths, runtime, evidence)
     metadata["state"] = "recorded"
-    metadata["summary"] = str((directory / _SUMMARY_FILENAME).relative_to(paths.root))
-    _write_json(directory / _METADATA_FILENAME, metadata)
-    current_path.unlink(missing_ok=True)
+    metadata["summary"] = str(summary.relative_to(paths.root))
+    _write_json(run.directory / _METADATA_FILENAME, metadata)
     return evidence
+
+
+def _load_unfinished(
+    paths: RepoPaths, runtime: str
+) -> tuple[SessionRun, dict] | None:
+    """Return the current run and its metadata while evidence is unfinished."""
+
+    run = current_run(paths, runtime)
+    if run is None:
+        return None
+    metadata_path = run.directory / _METADATA_FILENAME
+    if not metadata_path.exists():
+        return None
+    metadata = _read_json_object(metadata_path, required=True)
+    if _required_text(metadata, "runtime") != runtime:
+        raise EgressEvidenceError("egress evidence runtime does not match")
+    if _required_text(metadata, "session_id") != run.session_id:
+        raise EgressEvidenceError("egress evidence does not belong to the current run")
+    if "state" in metadata:
+        return None
+    return run, metadata
+
+
+def _context(paths: RepoPaths, run: SessionRun, directory: Path) -> EgressSessionContext:
+    return EgressSessionContext(
+        run.runtime,
+        run.session_id,
+        directory,
+        directory / ACCESS_LOG_FILENAME,
+        run.directory / _METADATA_FILENAME,
+    )
 
 
 def load_evidence_history(paths: RepoPaths, runtime: str) -> tuple[EgressSessionEvidence, ...]:
@@ -435,10 +439,6 @@ def _append_history(
         history = history[-_MAX_HISTORY:]
         payload = [item.to_json_dict() for item in history]
         _write_json(paths.session_artifact(runtime, _HISTORY_FILENAME), payload)
-    raw_history = history[-_MAX_RAW_SESSIONS:]
-    _prune_evidence_directories(
-        paths, runtime, {item.session_id for item in raw_history}
-    )
 
 
 def _access_log_paths(directory: Path) -> tuple[Path, ...]:
@@ -454,32 +454,11 @@ def _access_log_paths(directory: Path) -> tuple[Path, ...]:
     return tuple(sorted(logs, key=lambda item: (item.stat().st_mtime_ns, item.name)))
 
 
-def _prune_evidence_directories(
-    paths: RepoPaths,
-    runtime: str,
-    retained_session_ids: set[str],
-) -> None:
-    root = paths.session_artifact(runtime, _EVIDENCE_DIRNAME)
-    if not root.exists():
-        return
-    if root.is_symlink() or not root.is_dir():
-        raise EgressEvidenceError(
-            f"egress evidence root is unavailable or unsafe: {root}"
-        )
-    for directory in root.iterdir():
-        if directory.name in retained_session_ids:
-            continue
-        if directory.is_symlink() or not directory.is_dir():
-            raise EgressEvidenceError(
-                f"egress evidence session path is unavailable or unsafe: {directory}"
-            )
-        shutil.rmtree(directory)
 
 
-def _metadata_directory(paths: RepoPaths, runtime: str, metadata: dict) -> Path:
-    session_id = _required_text(metadata, "session_id")
+def _metadata_directory(paths: RepoPaths, run: SessionRun, metadata: dict) -> Path:
     relative = _required_text(metadata, "directory")
-    expected = paths.session_artifact(runtime, _EVIDENCE_DIRNAME, session_id)
+    expected = run.directory / ACCESS_LOG_DIRNAME
     try:
         recorded = paths.child(*Path(relative).parts)
     except (OSError, ValidationError) as exc:
@@ -487,7 +466,7 @@ def _metadata_directory(paths: RepoPaths, runtime: str, metadata: dict) -> Path:
             f"invalid egress evidence directory: {relative}"
         ) from exc
     if recorded != expected:
-        raise EgressEvidenceError("egress evidence directory does not match session identity")
+        raise EgressEvidenceError("egress evidence directory does not match the current run")
     if recorded.is_symlink() or not recorded.is_dir():
         raise EgressEvidenceError(
             f"egress evidence directory is unavailable: {recorded}"

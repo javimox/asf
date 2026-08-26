@@ -21,7 +21,6 @@ from asf.open_lifecycle import (
     OpenSignal,
     SessionProcessResult,
     SessionProcessSupervisor,
-    main,
     restore_terminal,
     run_open_session,
 )
@@ -221,42 +220,6 @@ class OpenLockCommandTests(unittest.TestCase):
         self.root = Path(self.temporary.name) / "asf"
         self.paths = make_checkout(self.root)
 
-    def test_acquire_uses_the_canonical_lock_manager(self) -> None:
-        status = main((
-            "acquire",
-            "--root", str(self.root),
-            "--runtime", "claude",
-            "--owner-pid", str(os.getpid()),
-        ))
-        self.assertEqual(status, 0)
-        snapshot = self.paths.identity.session_lock("claude")
-        self.assertEqual((snapshot / "pid").read_text(), f"{os.getpid()}\n")
-
-        with mock.patch("sys.stderr", new_callable=io.StringIO) as errors:
-            repeated = main((
-                "acquire",
-                "--root", str(self.root),
-                "--runtime", "claude",
-                "--owner-pid", str(os.getpid()),
-            ))
-        self.assertEqual(repeated, 1)
-        self.assertIn("session (PID", errors.getvalue())
-        self.assertIn("Attach to it", errors.getvalue())
-
-    def test_acquire_replaces_a_confirmed_stale_lock(self) -> None:
-        lock = self.paths.identity.session_lock("claude")
-        lock.mkdir(parents=True)
-        (lock / "pid").write_text("999999999\n")
-        with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
-            status = main((
-                "acquire",
-                "--root", str(self.root),
-                "--runtime", "claude",
-                "--owner-pid", str(os.getpid()),
-            ))
-        self.assertEqual(status, 0)
-        self.assertIn("Removing stale session lock", output.getvalue())
-        self.assertEqual((lock / "pid").read_text(), f"{os.getpid()}\n")
 
 
 
@@ -318,29 +281,6 @@ class OpenCleanupTests(unittest.TestCase):
             self.service.cleanup("claude", os.getpid() + 100000)
         self.assertTrue(lock.exists())
 
-    def test_cleanup_entry_restores_terminal_before_podman(self) -> None:
-        order: list[str] = []
-
-        def restore(_stream=None):  # noqa: ANN001
-            order.append("terminal")
-            return True
-
-        def unavailable(_client):  # noqa: ANN001
-            order.append("podman")
-            raise InfrastructureError("unavailable")
-
-        with mock.patch("asf.open_lifecycle.restore_terminal", side_effect=restore), mock.patch(
-            "asf.open_lifecycle.PodmanClient.require_available", unavailable
-        ), mock.patch("sys.stderr", new_callable=io.StringIO):
-            status = main((
-                "cleanup",
-                "--root", str(self.root),
-                "--runtime", "claude",
-                "--owner-pid", str(os.getpid()),
-            ))
-
-        self.assertEqual(status, 1)
-        self.assertEqual(order, ["terminal", "podman"])
 
 
 class FakeCleanup:

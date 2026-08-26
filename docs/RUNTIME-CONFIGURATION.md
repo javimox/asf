@@ -244,7 +244,6 @@ knobs when the combination is supported.
 | `network.mode` | `proxy`, `routed`, or `isolated` |
 | `capabilities` | optional; `net_raw` only. With `microvm`, requires `routed` |
 | `observability.llm_prompts` | requires `llm.broker: true` |
-| `observability.network_activity` | requires `microvm` + `routed` |
 | proxy fields | `verify_domain`, `allow_domains` |
 | routed fields | `allow`, optional `verify` |
 
@@ -269,7 +268,6 @@ llm:
 
 observability:
   llm_prompts: false      # requires broker; stores full prompts on host
-  network_activity: false # requires microvm+routed; no packet payloads
 
 network:
   # proxy (usual default)
@@ -415,6 +413,8 @@ than one is running:
 ```bash
 ./sandbox.sh ls                  # show active/deployed sessions
 ./sandbox.sh observe [agent]     # host-side session and privilege state
+./sandbox.sh capture start [agent] # start routed microVM PCAP capture
+./sandbox.sh capture stop [agent]  # stop capture and finalize the PCAP
 ./sandbox.sh shell hermes        # attach
 ./sandbox.sh broker status claude
 ./sandbox.sh scan my-api hermes

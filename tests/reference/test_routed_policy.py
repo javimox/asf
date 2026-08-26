@@ -10,7 +10,7 @@ from asf.models import RoutedRule
 from asf.routed_policy import render_routed_policy
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "tests" / "parity" / "routed_policy_vectors.json"
+FIXTURE = ROOT / "tests" / "reference" / "routed_policy_vectors.json"
 
 
 class RoutedPolicyParityTests(unittest.TestCase):

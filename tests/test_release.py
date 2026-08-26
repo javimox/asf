@@ -19,12 +19,12 @@ class ReleaseMetadataTests(unittest.TestCase):
         project_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         match = re.search(r'^version = "([^"]+)"$', project_text, re.MULTILINE)
         self.assertIsNotNone(match)
-        self.assertEqual(display, "1.0")
-        self.assertEqual(__version__, "1.0")
+        self.assertEqual(display, "2.0")
+        self.assertEqual(__version__, "2.0")
         self.assertEqual(match.group(1), __version__)
 
     def test_source_sbom_describes_the_release(self) -> None:
-        path = ROOT / "docs" / "sbom" / "asf-v1.0.spdx.json"
+        path = ROOT / "docs" / "sbom" / "asf-v2.0.spdx.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(data["spdxVersion"], "SPDX-2.3")
         self.assertIn("SPDXRef-Package-ASF", data["documentDescribes"])
@@ -32,7 +32,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             item for item in data["packages"]
             if item["SPDXID"] == "SPDXRef-Package-ASF"
         )
-        self.assertEqual(package["versionInfo"], "1.0")
+        self.assertEqual(package["versionInfo"], "2.0")
         self.assertFalse(package["filesAnalyzed"])
 
 

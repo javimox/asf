@@ -12,7 +12,6 @@ recovery tooling; it contains no independent resource-removal logic.
 
 from __future__ import annotations
 
-import argparse
 import os
 import math
 import signal
@@ -25,17 +24,12 @@ from enum import Enum
 from typing import TextIO
 
 from .errors import AsfError, InfrastructureError, ValidationError
-from .paths import RepoPaths
-from .podman import PodmanClient, PodmanUnavailableError
-from .session_lock import SessionAlreadyRunningError, SessionLockManager
 from .stop import (
     StopEmitter,
     StopEvent,
     StopReport,
     StopService,
-    StopStream,
     emit_stop_completion,
-    stop_service_from_environment,
 )
 
 __all__ = [
@@ -45,7 +39,6 @@ __all__ = [
     "OpenSignal",
     "SessionProcessResult",
     "SessionProcessSupervisor",
-    "main",
     "restore_terminal",
     "run_open_session",
 ]
@@ -391,134 +384,6 @@ def run_open_session(
     assert cleanup_result is not None
     return cleanup_result.returncode
 
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = _parser()
-    namespace = parser.parse_args(sys.argv[1:] if argv is None else argv)
-    output = sys.stdout
-    errors = sys.stderr
-
-    try:
-        paths = RepoPaths.for_root(namespace.root)
-        if namespace.action == "acquire":
-            manager = SessionLockManager(paths.identity)
-            previous = manager.inspect(namespace.runtime)
-            try:
-                manager.acquire(
-                    namespace.runtime,
-                    owner_pid=namespace.owner_pid,
-                )
-            except SessionAlreadyRunningError as exc:
-                owner = "unknown" if exc.pid is None else str(exc.pid)
-                errors.write(
-                    f"{_RED}A {namespace.runtime} session (PID {owner}) "
-                    f"is already running.{_RESET}\n"
-                    f"  Attach to it:      ./sandbox.sh shell "
-                    f"{namespace.runtime}\n"
-                    "  Other agents can run at the same time: "
-                    "./sandbox.sh open <other>\n"
-                )
-                return exc.exit_code
-            if previous is not None and previous.is_stale:
-                owner = "unknown" if previous.pid is None else str(previous.pid)
-                output.write(
-                    f"  {_YELLOW}Removing stale session lock "
-                    f"(PID {owner} is gone){_RESET}\n"
-                )
-            return 0
-
-        if namespace.action == "cleanup":
-            # Startup-failure cleanup may be invoked from a shell trap after a
-            # TTY-owning command. Restore the operator terminal before Podman.
-            restore_terminal(errors)
-
-        client = PodmanClient()
-        client.require_available()
-        stop_service = stop_service_from_environment(paths, podman=client)
-        cleanup = OpenCleanupService(stop_service)
-
-        def emit(event: StopEvent) -> None:
-            target = output if event.stream is StopStream.STDOUT else errors
-            target.write(event.text)
-            target.flush()
-
-        if namespace.action == "cleanup":
-            requested_signal = OpenSignal.parse(namespace.signal)
-            try:
-                result = cleanup.cleanup(
-                    namespace.runtime,
-                    namespace.owner_pid,
-                    event_sink=emit,
-                )
-            except AsfError as exc:
-                errors.write(
-                    f"{_RED}ASF session cleanup failed for "
-                    f"{namespace.runtime}.{_RESET}\n  {exc}\n"
-                )
-                return (
-                    requested_signal.exit_code
-                    if requested_signal is not None
-                    else exc.exit_code
-                )
-            return (
-                requested_signal.exit_code
-                if requested_signal is not None
-                else result.returncode
-            )
-
-        child = list(namespace.child)
-        if child and child[0] == "--":
-            child = child[1:]
-        return run_open_session(
-            child,
-            cleanup=cleanup,
-            runtime=namespace.runtime,
-            owner_pid=namespace.owner_pid,
-            supervisor=SessionProcessSupervisor(
-                signal_grace_seconds=stop_service.cleanup.stop_timeout
-            ),
-            event_sink=emit,
-            stderr=errors,
-        )
-    except PodmanUnavailableError as exc:
-        errors.write(f"{exc}\n")
-        return 1
-    except AsfError as exc:
-        errors.write(f"{exc}\n")
-        return exc.exit_code
-    except (OSError, TypeError, ValueError) as exc:
-        errors.write(f"{exc}\n")
-        return 1
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
-    subparsers = parser.add_subparsers(dest="action", required=True)
-    for name in ("acquire", "cleanup", "run"):
-        command = subparsers.add_parser(name, add_help=False)
-        command.add_argument("--root", required=True)
-        command.add_argument("--runtime", required=True)
-        command.add_argument("--owner-pid", required=True, type=_positive_pid)
-        if name == "cleanup":
-            command.add_argument(
-                "--signal",
-                choices=[item.value for item in OpenSignal],
-            )
-        elif name == "run":
-            command.add_argument("child", nargs=argparse.REMAINDER)
-    return parser
-
-
-def _positive_pid(value: str) -> int:
-    try:
-        pid = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("owner PID must be an integer") from exc
-    if pid <= 0:
-        raise argparse.ArgumentTypeError("owner PID must be positive")
-    return pid
-
-
 def _normalise_child_argv(argv: Sequence[str]) -> list[str]:
     if isinstance(argv, (str, bytes)):
         raise TypeError("session argv must be a sequence")
@@ -538,7 +403,3 @@ def _signal_from_number(signum: int) -> OpenSignal | None:
         if item.number == signum:
             return item
     return None
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

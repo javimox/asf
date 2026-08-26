@@ -19,7 +19,7 @@ _PROMPT_LOG_PATH = Path(
 )
 _PROMPTS_ENABLED = os.environ.get("ASF_LLM_PROMPTS", "false") == "true"
 _RUNTIME = os.environ.get("LITELLM_AGENT", "")
-_SESSION_ID = os.environ.get("ASF_OBSERVATION_SESSION_ID", "")
+_SESSION_ID = os.environ.get("ASF_SESSION_ID", "")
 _PROVIDER = os.environ.get("ASF_LITELLM_PROVIDER", "")
 
 

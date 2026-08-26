@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Parity and contract tests for asf.identity.
 
-``GoldenVectorTests`` and ``IdentityContractTests`` are permanent: they pin the
+``ReferenceVectorTests`` and ``IdentityContractTests`` are permanent: they pin the
 naming contract against ``identity_vectors.json`` and against the filesystem,
 and must keep passing after Bash is gone.
 
@@ -12,7 +12,6 @@ permanent contract after the Bash implementation was removed.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -33,7 +32,7 @@ def load_vectors() -> dict:
     return json.loads(VECTORS_FILE.read_text(encoding="utf-8"))
 
 
-class GoldenVectorTests(unittest.TestCase):
+class ReferenceVectorTests(unittest.TestCase):
     """Permanent. Requires neither Bash nor a filesystem."""
 
     def test_prefixes_and_podman_safety(self) -> None:

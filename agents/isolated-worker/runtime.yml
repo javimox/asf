@@ -50,8 +50,6 @@ llm:
 observability:
   # Prompt capture is available only when the LiteLLM broker is enabled.
   llm_prompts: false
-  # routed+microvm only; records TCP SYN, UDP and ICMP echo attempts, no payloads.
-  network_activity: false
 
 secrets:
   files:

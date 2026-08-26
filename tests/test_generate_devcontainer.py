@@ -4,8 +4,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import socket
-import subprocess
-import sys
 import tempfile
 import unittest
 from ipaddress import IPv4Network
@@ -21,6 +19,7 @@ from asf.devcontainer import (
     load_request,
     write_atomic,
 )
+from asf.errors import ValidationError
 from asf.manifest import load_model
 from asf.models import (
     EnvironmentVariable,
@@ -33,6 +32,7 @@ from asf.models import (
 from asf.paths import RepoPaths
 from asf.repositories import RepositoryEntry
 from asf.runtime_plan import (
+    RuntimePlanError,
     BROKER_INTERNAL_ALIAS,
     PROXY_INTERNAL_ALIAS,
     RoutedSubnetAllocation,
@@ -40,7 +40,6 @@ from asf.runtime_plan import (
     runtime_plan_path,
     write_runtime_plan,
 )
-from asf.session import SessionRole
 
 ROOT = Path(__file__).resolve().parents[1]
 BROKER_PROBE = ROOT / "tools" / "broker_probe.py"
@@ -362,28 +361,30 @@ class GenerateDevcontainerTests(unittest.TestCase):
             )
         )
 
-    def test_build_only_cli_succeeds_without_a_persisted_plan(self) -> None:
-        command = [
-            sys.executable,
-            "-m",
-            "asf.devcontainer",
-            "--root",
-            str(self.root),
-            "--runtime",
-            "hermes",
-            "--build-only",
-            "--run-arg=--cap-drop=ALL",
-            "--run-arg=--security-opt=no-new-privileges",
-            "--run-arg=--sysctl=net.ipv4.ip_forward=0",
-            "--run-arg=--sysctl=net.ipv6.conf.all.forwarding=0",
-        ]
-        subprocess.run(command, check=True, capture_output=True, text=True)
+    def _generate(self, runtime: str, **kwargs) -> None:
+        """Mirror ``RuntimeService._generate_devcontainer`` for one runtime."""
+
+        request = load_request(root=self.root, runtime=runtime, **kwargs)
+        write_atomic(request.output_path, build_devcontainer_config(request))
+
+    def test_build_only_request_succeeds_without_a_persisted_plan(self) -> None:
+        build_request = load_build_request(
+            root=self.root,
+            runtime="hermes",
+            run_arguments=(
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--sysctl=net.ipv4.ip_forward=0",
+                "--sysctl=net.ipv6.conf.all.forwarding=0",
+            ),
+        )
+        write_atomic(build_request.output_path, build_build_config(build_request))
         loaded = load_build_request(root=self.root, runtime="hermes")
         self.assertEqual(loaded.manifest.name, "hermes")
         self.assertTrue(loaded.output_path.is_file())
         self.assertFalse(runtime_plan_path(self.paths, "hermes").exists())
 
-    def test_cli_loads_the_persisted_plan(self) -> None:
+    def test_generation_loads_the_persisted_plan(self) -> None:
         manifest = load_model(self.paths.identity.runtime_manifest("claude"))
         plan = build_runtime_plan(
             manifest,
@@ -392,21 +393,7 @@ class GenerateDevcontainerTests(unittest.TestCase):
             broker_globally_enabled=False,
         )
         write_runtime_plan(plan)
-        command = [
-            sys.executable,
-            "-m",
-            "asf.devcontainer",
-            "--root",
-            str(self.root),
-            "--runtime",
-            "claude",
-            f"--run-arg={self.hardening_args()[0]}",
-            "--run-arg=--cap-drop=ALL",
-            "--run-arg=--security-opt=no-new-privileges",
-            "--run-arg=--sysctl=net.ipv4.ip_forward=0",
-            "--run-arg=--sysctl=net.ipv6.conf.all.forwarding=0",
-        ]
-        subprocess.run(command, check=True, capture_output=True, text=True)
+        self._generate("claude", run_arguments=self.hardening_args())
         self.assertEqual(
             load_request(
                 root=self.root,
@@ -417,7 +404,7 @@ class GenerateDevcontainerTests(unittest.TestCase):
         )
         self.assertTrue(self.paths.identity.config_json("claude").is_file())
 
-    def test_cli_rejects_a_tampered_persisted_plan(self) -> None:
+    def test_generation_rejects_a_tampered_persisted_plan(self) -> None:
         manifest = load_model(self.paths.identity.runtime_manifest("claude"))
         plan = build_runtime_plan(
             manifest,
@@ -429,21 +416,8 @@ class GenerateDevcontainerTests(unittest.TestCase):
         payload = json.loads(path.read_text(encoding="utf-8"))
         payload["runtime_container"]["name"] = "foreign-container"
         path.write_text(json.dumps(payload), encoding="utf-8")
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-            "asf.devcontainer",
-                "--root",
-                str(self.root),
-                "--runtime",
-                "claude",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("does not match the current manifest", result.stderr)
+        with self.assertRaisesRegex(RuntimePlanError, "does not match the current manifest"):
+            self._generate("claude", run_arguments=self.hardening_args())
         self.assertFalse(self.paths.identity.config_json("claude").exists())
 
     def test_session_symlink_cannot_redirect_generated_output(self) -> None:
@@ -462,24 +436,10 @@ class GenerateDevcontainerTests(unittest.TestCase):
             child.unlink()
         session.rmdir()
         session.symlink_to(outside, target_is_directory=True)
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-            "asf.devcontainer",
-                "--root",
-                str(self.root),
-                "--runtime",
-                "claude",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 1)
+        with self.assertRaises((RuntimePlanError, DevcontainerError, ValidationError, OSError)):
+            self._generate("claude", run_arguments=self.hardening_args())
         self.assertFalse((outside / "devcontainer.json").exists())
 
-
-class ProductionBoundaryTests(unittest.TestCase):
     def test_build_and_open_use_typed_render_requests(self) -> None:
         maintenance = (ROOT / "asf" / "maintenance.py").read_text(encoding="utf-8")
         runtime = (ROOT / "asf" / "runtime.py").read_text(encoding="utf-8")

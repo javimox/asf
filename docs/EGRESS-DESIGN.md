@@ -18,8 +18,10 @@ Caddy is the only proxy accepted by the normal lifecycle. It provides:
 The agent joins an internal network with no default route. Caddy joins that
 network and a separate egress network, so it is the agent's only external path.
 
-Comparison proxies remain in `tests/experiments/compare-tinyproxy-caddy.sh`; they cannot be
-selected with `PROXY_IMPL` in production.
+Tinyproxy remains only as archived comparative material on the
+`research-spikes` branch. Tinyproxy and g3proxy cannot be selected with
+`PROXY_IMPL` in
+production.
 
 ## Startup verification
 
@@ -55,7 +57,7 @@ denials. A deny verdict requires Caddy's explicit rejection.
 
 `proxy status` shows the active container, networks, permitted port, and
 allowlisted hosts. `CADDY_ACCESS_LOGS=true` enables JSON access records under
-`.devcontainer/sessions/<agent>/evidence/<session-id>/`. The active file is
+`.devcontainer/sessions/<agent>/runs/<session-id>/caddy/`. The active file is
 available through `proxy logs`; Caddy rotates it at 10 MiB and retains two
 uncompressed backups for that session.
 
@@ -67,10 +69,10 @@ so access logging should be disabled when it is not needed.
 
 At successful teardown ASF parses the session's Caddy logs and stores:
 
-- `summary.json` in the dedicated session evidence directory;
+- `egress-summary.json` in the run directory;
 - a bounded `egress-history.json` containing the latest 100 summaries;
-- raw log files and per-session metadata for the latest 12 sessions, matching
-  the advice window.
+- raw log files and metadata for the latest 12 runs, matching the advice
+  window.
 
 Startup verification requests carry `X-ASF-Probe: verification` and are
 excluded, so ASF's own positive and negative controls cannot bias the policy

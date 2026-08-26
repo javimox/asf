@@ -108,6 +108,15 @@ class TypedManifestTests(unittest.TestCase):
                 }
             )
 
+    def test_network_capture_is_not_a_manifest_setting(self) -> None:
+        with self.assertRaisesRegex(ManifestError, "unknown key.*network_capture"):
+            validate(
+                {
+                    "name": "demo",
+                    "observability": {"network_capture": True},
+                }
+            )
+
     def test_routed_manifest_uses_ipaddress_types(self) -> None:
         model = parse(
             {

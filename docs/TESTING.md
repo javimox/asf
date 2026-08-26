@@ -1,9 +1,20 @@
 # ASF runtime testing
 
+## Fast local suite
+
+```bash
+bash tests/run.sh
+```
+
+Runs shell syntax checks, the Python unit tests (`tests/test_*.py`, fake
+Podman engines, no containers), the reference-output tests under `tests/reference/`
+(recorded CLI transcripts and argv vectors that pin user-visible behavior), and
+the mocked shell suites. This is what CI runs.
+
 ## Complete host test
 
 Run the real proxy lifecycle, isolated lifecycle, Caddy request-path policy,
-private-address denial, and the capability-less gateway test:
+and private-address denial tests:
 
 ```bash
 bash tests/run-host.sh
@@ -22,35 +33,12 @@ startup bound is 900 seconds and can be adjusted for a slow build host:
 ASF_HOST_OPEN_TIMEOUT=1800 bash tests/run-host.sh
 ```
 
-Tinyproxy is not part of the production suite. Run the optional comparison
-experiment only when collecting design evidence:
-
-```bash
-bash tests/experiments/compare-tinyproxy-caddy.sh
-```
-
 The external routed lifecycle test is added automatically when the three
 `ASF_ROUTED_*` target variables are set.
 
-Optional design evidence:
-
-```bash
-ASF_RUN_DESIGN_SPIKES=1 bash tests/run-host.sh
-```
-
-The older stage-2 and combined spikes also exercise UDP and require six target
-variables. Enable them only for the full lab target:
-
-```bash
-ASF_RUN_LEGACY_ROUTED_SPIKES=1 \
-ASF_ROUTED_TARGET_IP=192.0.2.2 \
-ASF_ROUTED_TARGET_CIDR=192.0.2.0/24 \
-ASF_ROUTED_ALLOWED_PORT=18080 \
-ASF_ROUTED_BLOCKED_PORT=19999 \
-ASF_ROUTED_ALLOWED_UDP=18161 \
-ASF_ROUTED_BLOCKED_UDP=19998 \
-bash tests/run-host.sh
-```
+Design spikes, stand-alone diagnostics, and the Tinyproxy/Caddy comparison
+live on the archival `research-spikes` branch, not on `main`. They are retained
+as historical and comparative evidence only.
 
 ## Running-session checks
 
@@ -86,10 +74,11 @@ security-test pass.
 `CADDY_ACCESS_LOGS=true` in `asf.conf` enables JSON access logs. For HTTPS,
 Caddy records the `CONNECT host:443` decision; tunneled HTTPS content remains
 encrypted. Plain-HTTP request metadata is visible. The active file is shown by
-`proxy logs`; after teardown, raw files and `summary.json` remain under
-`.devcontainer/sessions/<agent>/evidence/<session-id>/`. Logs rotate at 10 MiB,
-two backups are kept per session, and ASF retains raw evidence for the latest
-12 sessions plus compact summaries for the latest 100 completed sessions.
+`proxy logs`; after teardown the raw files stay under
+`.devcontainer/sessions/<agent>/runs/<session-id>/caddy/` next to
+`egress-summary.json`. Logs rotate at 10 MiB, two backups are kept per session,
+ASF retains the latest 12 runs, and `egress-history.json` keeps compact
+summaries for the latest 100 completed sessions.
 Disable access logging when request metadata should not be retained.
 
 After several completed proxy sessions, inspect evidence-backed policy advice:
@@ -175,20 +164,8 @@ loads nftables through a short-lived `NET_ADMIN` initializer, verifies structura
 routing invariants, then starts the runtime. Optional `network.verify` adds live
 allow/deny controls.
 
-## Lower-level routed tests
-
-```bash
-bash tests/spike-gateway-caps.sh
-bash tests/experiments/spike-gateway.sh
-bash tests/experiments/spike-rootless-gateway-stage2.sh
-bash tests/experiments/spike-combined-internal-routed-v2.sh
-```
-
-`test_routed_integration.sh` is the primary production-lifecycle test. The
-spikes preserve lower-level design evidence. Some legacy spikes use configurable
-static subnets; review their defaults for collisions before running them. The
-stage-2 and combined spikes also require the LAN/VM target described in their
-headers.
+`test_routed_integration.sh` is the primary production-lifecycle test; the
+lower-level routed spikes it superseded are on the `research-spikes` branch.
 
 ### Routed verification scope
 
@@ -196,41 +173,27 @@ Every routed startup verifies structural invariants: declared routes, no IPv4 or
 IPv6 default route, no undeclared route, and no external DNS path. If the
 manifest includes optional `network.verify`, startup additionally proves one
 known-reachable allowed TCP path and one known-open blocked TCP path. UDP and
-ICMP rules are generated and covered by unit/spike/manual tests, but are not
+ICMP rules are generated and covered by unit and manual tests, but are not
 positively exercised on every session. Routed mode is IPv4-only.
 
-## Diagnostic tools (real host, read-mostly)
+## Proxy ACL ordering (real host)
 
-These are not part of any suite; run them when a session misbehaves and you
-need to know *which layer* is at fault.
+`tests/test_caddy_private_resolution.sh` is part of `run-host.sh` and proves
+that an allowlisted hostname resolving to a private Podman IP is still rejected
+on CONNECT and on plain HTTP.
 
-```bash
-# Which layer breaks a connection: host vs plain container vs VPN/routes.
-bash tools/diagnostics/diagnose-network.sh
-
-# SSH / port-22 reachability for the host-push git workflow.
-bash tools/diagnostics/diagnose-github-ssh.sh
-bash tools/diagnostics/diagnose-port22.sh
-
-# Exercise the EXACT Caddy image and probe image this checkout selects.
-# Unlike ad-hoc image discovery, this cannot accidentally test a stale
-# localhost/asf-proxy-caddy tag left behind by an older ASF candidate.
-bash tests/experiments/spike-current-caddy-responses.sh
-
-# Prove ACL ordering: an allowlisted hostname that resolves to a private
-# Podman IP must still be rejected on CONNECT and on plain HTTP.
-bash tests/spike-caddy-private-resolution.sh
-```
-
-For a running session, prefer the built-in commands:
+For a running session, use the built-in commands:
 
 ```bash
 ./sandbox.sh observe [agent]
+./sandbox.sh capture start|stop [agent]
 ./sandbox.sh proxy status|config|logs [agent]
 ./sandbox.sh broker status|logs [agent]
 ./sandbox.sh test <agent>
 ```
 Each session also persists its evidence records under
-`.devcontainer/sessions/<agent>/`: `runtime-plan.json`,
-`verification-report.json`, `cleanup-report.json`, and for proxy mode
-`egress-history.json` plus per-session Caddy evidence directories.
+`.devcontainer/sessions/<agent>/runs/<session-id>/`: `policy.json`,
+`events.jsonl`, `verification-report.json`, `cleanup-report.json`, and for
+proxy mode the Caddy logs and `egress-summary.json`. `runtime-plan.json` and
+`egress-history.json` stay at the session level. See
+[OBSERVABILITY.md](OBSERVABILITY.md).

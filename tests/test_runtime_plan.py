@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -622,7 +621,7 @@ class RuntimePlanWriteTests(unittest.TestCase):
                 paths,
             )
 
-    def test_atomic_write_and_cli_stdout(self) -> None:
+    def test_atomic_write_and_json_round_trip(self) -> None:
         paths = RepoPaths.for_root(ROOT)
         manifest = load_model(paths.identity.runtime_manifest("claude"))
         plan = build_runtime_plan(
@@ -638,29 +637,7 @@ class RuntimePlanWriteTests(unittest.TestCase):
             write_runtime_plan(plan, output)
             self.assertEqual(output.read_text(encoding="utf-8"), first)
             self.assertFalse(any(output.parent.glob(f".{output.name}.*")))
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "asf.runtime_plan",
-                "--root",
-                str(ROOT),
-                "--runtime",
-                "claude",
-                "--owner-pid",
-                "17",
-                "--broker-enabled",
-                "false",
-                "--stdout",
-            ],
-            cwd=ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout)["runtime"], "claude")
+        self.assertEqual(json.loads(json.dumps(plan.to_dict()))["runtime"], "claude")
 
 
 

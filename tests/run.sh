@@ -14,7 +14,6 @@ bash -n \
     "$ROOT"/agents/*/setup.sh \
     "$ROOT"/tests/*.sh \
     "$ROOT"/tests/lib/*.sh \
-    "$ROOT"/tests/experiments/*.sh \
     "$ROOT"/tools/krun-runtime/*.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
@@ -24,14 +23,13 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$ROOT"/agents/*/setup.sh \
         "$ROOT"/tests/*.sh \
         "$ROOT"/tests/lib/*.sh \
-        "$ROOT"/tests/experiments/*.sh \
         "$ROOT"/tools/krun-runtime/*.sh
 else
     echo "shellcheck not found; skipping local static shell analysis" >&2
 fi
 
 python3 -m unittest discover -s "$ROOT/tests" -p 'test_*.py' -v
-bash "$ROOT/tests/run_parity.sh"
+bash "$ROOT/tests/run_reference.sh"
 python3 -m compileall -q "$ROOT/asf" "$ROOT/tools" "$ROOT/tests"
 # Run each shell suite explicitly so a failure names the file that failed
 # (bare `[[ ]]` assertions exit silently under set -e).

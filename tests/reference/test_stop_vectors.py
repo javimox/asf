@@ -22,7 +22,6 @@ from pathlib import Path
 from unittest import mock
 
 from asf.cleanup import CleanupExecutor
-from asf.identity import ResourceIdentity
 from asf.paths import RepoPaths
 from asf.podman import (
     ContainerInspection,

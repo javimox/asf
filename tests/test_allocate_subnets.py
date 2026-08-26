@@ -2,12 +2,10 @@
 """Compatibility and regression tests for routed subnet allocation."""
 from __future__ import annotations
 
-import io
 import json
 import os
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
 from ipaddress import IPv4Network
 from pathlib import Path
 from unittest.mock import patch
@@ -184,54 +182,6 @@ class ReservationTests(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(data["pid"], 424242)
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-
-
-class CliTests(unittest.TestCase):
-    def test_cli_requires_owner_when_reserving(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary, redirect_stderr(io.StringIO()):
-            self.assertEqual(
-                alloc.main([
-                    "--session", "demo", "--count", "1", "--no-probe",
-                    "--reservation-dir", temporary,
-                ]),
-                1,
-            )
-
-    def test_cli_emits_json_and_fixed_shell_addresses(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            common = [
-                "--session", "demo", "--count", "1", "--no-probe",
-                "--no-reserve", "--reservation-dir", temporary,
-            ]
-            stdout = io.StringIO()
-            with redirect_stdout(stdout):
-                self.assertEqual(alloc.main([*common, "--emit", "json"]), 0)
-            self.assertEqual(len(json.loads(stdout.getvalue())), 1)
-            stdout = io.StringIO()
-            with redirect_stdout(stdout):
-                self.assertEqual(alloc.main(common), 0)
-            text = stdout.getvalue()
-            self.assertIn("ASF_SUBNET_0_GATEWAY_IP=", text)
-            self.assertIn("ASF_SUBNET_0_ROUTER_IP=", text)
-            self.assertIn("ASF_SUBNET_0_RUNTIME_IP=", text)
-
-    def test_gateway_spike_uses_its_parsed_runtime_address(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        spike = (root / "tests" / "spike-gateway-caps.sh").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "SCAN_A_SUBNET SCAN_A_GW GW_A SCAN_A_RUNTIME",
-            spike,
-        )
-        self.assertIn('load_rules "$GW_A" "$SCAN_A_RUNTIME"', spike)
-        self.assertNotIn('$ASF_SUBNET_0_RUNTIME_IP', spike)
-
-    def test_standalone_tool_is_a_thin_wrapper(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        source = (root / "tools" / "allocate_subnets.py").read_text(encoding="utf-8")
-        self.assertIn("from asf.routed_allocation import main", source)
-        self.assertNotIn("def allocate", source)
 
 
 if __name__ == "__main__":

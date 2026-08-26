@@ -2,14 +2,14 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "annotations": [
     {
-      "annotationDate": "2026-08-24T00:22:25Z",
+      "annotationDate": "2026-08-26T21:56:42Z",
       "annotationType": "OTHER",
       "annotator": "Tool: tools/generate_sbom.py",
       "comment": "Source/deployment inventory only; container image layers were not scanned."
     }
   ],
   "creationInfo": {
-    "created": "2026-08-24T00:22:25Z",
+    "created": "2026-08-26T21:56:42Z",
     "creators": [
       "Tool: tools/generate_sbom.py"
     ]
@@ -18,18 +18,18 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/1.0/098d4189032329ea",
-  "name": "ASF-1.0-source-deployment-inventory",
+  "documentNamespace": "https://asf.invalid/spdx/2.0/6558964331d6abb9",
+  "name": "ASF-2.0-source-deployment-inventory",
   "packages": [
     {
       "SPDXID": "SPDXRef-Package-ASF",
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "098d4189032329eac3160a88e2a3c4c18667c2c15bba9b35873d18101bedf042"
+          "checksumValue": "6558964331d6abb9742fa0f666c6825dc078f8dd1a6bb2bc7cf0da8559df265f"
         }
       ],
-      "comment": "Deterministic source-tree digest over 229 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the docs/sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
+      "comment": "Deterministic source-tree digest over 218 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the docs/sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
       "copyrightText": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -37,9 +37,9 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "098d4189032329eac3160a88e2a3c4c18667c2c15bba9b35873d18101bedf042"
+        "packageVerificationCodeValue": "6558964331d6abb9742fa0f666c6825dc078f8dd1a6bb2bc7cf0da8559df265f"
       },
-      "versionInfo": "1.0"
+      "versionInfo": "2.0"
     }
   ],
   "spdxVersion": "SPDX-2.3"

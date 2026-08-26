@@ -208,27 +208,19 @@ class DependencyPinTests(unittest.TestCase):
 
     def test_routed_cleanup_avoids_one_step_forced_removal(self) -> None:
         cleanup = (ROOT / "asf" / "cleanup.py").read_text(encoding="utf-8")
-        spike = (ROOT / "tests" / "spike-gateway-caps.sh").read_text(encoding="utf-8")
         routed_cleanup = cleanup.split("def _remove_routed_container", 1)[1].split(
             "def _inspect_after_failed_stop", 1
         )[0]
         self.assertIn('"stop"', routed_cleanup)
         self.assertIn('"rm"', routed_cleanup)
         self.assertNotIn('"--force"', routed_cleanup)
-        self.assertIn('podman stop --ignore --time 2 "$GW"', spike)
-        self.assertIn('podman rm --ignore "$GW"', spike)
-        self.assertNotIn('podman rm -f "$GW" >/dev/null\n\nhdr "C4', spike)
-        self.assertNotIn('podman rm -f "$GW" >/dev/null\nholder "$SCAN_B"', spike)
 
     def test_routed_gateway_holder_is_signal_aware(self) -> None:
         routed = (ROOT / "asf" / "routed.py").read_text(encoding="utf-8")
-        spike = (ROOT / "tests" / "spike-gateway-caps.sh").read_text(encoding="utf-8")
-        for source in (routed, spike):
-            self.assertIn("trap 'exit 0' TERM INT HUP", source)
-            self.assertIn("/usr/local/bin/asf-gateway-holder", source)
-            self.assertIn("--stop-timeout=2", source)
+        self.assertIn("trap 'exit 0' TERM INT HUP", routed)
+        self.assertIn("/usr/local/bin/asf-gateway-holder", routed)
+        self.assertIn("--stop-timeout=2", routed)
         self.assertNotIn('CMD ["sleep", "infinity"]', routed)
-        self.assertNotIn('$IMAGE sleep infinity', spike)
 
 
     def test_routed_integration_prints_success_evidence(self) -> None:

@@ -12,6 +12,7 @@ from pathlib import Path
 from asf.errors import ConfigurationError, ValidationError
 from asf.manifest import load_model
 from asf.paths import RepoPaths
+from asf.runs import begin_run
 from asf.podman import PodmanClient
 from asf.process import CommandResult
 from asf.proxy import (
@@ -27,7 +28,6 @@ from asf.proxy import (
     ProxyRequest,
     ProxyService,
     caddy_image_tag,
-    effective_proxy_domains,
     load_request,
     render_caddyfile,
     render_containerfile,
@@ -78,6 +78,7 @@ class ProxyTestBase(unittest.TestCase):
             encoding="utf-8",
         )
         self.paths = RepoPaths.for_root(self.root)
+        begin_run(self.paths, "claude")
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()

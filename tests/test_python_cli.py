@@ -40,7 +40,7 @@ class PythonCliTests(unittest.TestCase):
         stderr = io.StringIO()
         status = main(["--version"], stdout=stdout, stderr=stderr)
         self.assertEqual(status, 0)
-        self.assertEqual(stdout.getvalue(), "ASF 1.0\n")
+        self.assertEqual(stdout.getvalue(), "ASF 2.0\n")
         self.assertEqual(stderr.getvalue(), "")
 
     def test_unknown_command_is_a_clean_usage_error(self) -> None:
@@ -49,7 +49,7 @@ class PythonCliTests(unittest.TestCase):
         status = main(["unknown"], stdout=stdout, stderr=stderr)
         self.assertEqual(status, 1)
         self.assertEqual(stdout.getvalue(), "")
-        self.assertIn("{open|shell|ls|observe|repo|repository|build|scan", stderr.getvalue())
+        self.assertIn("{open|shell|ls|observe|capture|repo|repository|build|scan", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_open_requires_a_runtime(self) -> None:
@@ -108,7 +108,7 @@ class PythonCliTests(unittest.TestCase):
         stderr = io.StringIO()
         status = main(["repos"], stdout=io.StringIO(), stderr=stderr)
         self.assertEqual(status, 1)
-        self.assertIn("{open|shell|ls|observe|repo|repository|build|scan", stderr.getvalue())
+        self.assertIn("{open|shell|ls|observe|capture|repo|repository|build|scan", stderr.getvalue())
 
     def test_ls_renders_running_agent_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

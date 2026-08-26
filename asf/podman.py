@@ -22,6 +22,7 @@ from types import MappingProxyType
 from typing import Any, TypeAlias
 
 from .errors import InfrastructureError, ValidationError
+from .schema import Schema
 from .process import (
     CommandError,
     CommandNotFoundError,
@@ -803,16 +804,15 @@ def _parse_exit_code(value: Any, context: str) -> int | None:
     return value
 
 
+_schema = Schema(PodmanOutputError)
+
+
 def _require_mapping(value: Any, context: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise PodmanOutputError(f"{context} must be an object")
-    return value
+    return _schema.mapping(value, context)
 
 
 def _require_text(value: Any, context: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise PodmanOutputError(f"{context} must be non-empty text")
-    return value
+    return _schema.text(value, context, allow_empty=False)
 
 
 def _existence_argv(

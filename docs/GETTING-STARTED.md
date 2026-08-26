@@ -14,6 +14,10 @@ ownership, agent selection, Git workflow, and useful local notes.
 ./sandbox.sh shell [agent]     attach to an already-running container
 ./sandbox.sh ls                show running and deployed agent sessions
 ./sandbox.sh observe [agent]   show host-side session and privilege state
+./sandbox.sh capture start [agent]
+                             start routed microVM PCAP capture
+./sandbox.sh capture stop [agent]
+                             stop capture and finalize the PCAP
 ./sandbox.sh stop [agent]      stop one session, or all of them
 ./sandbox.sh reset <agent>     clear one agent's persistent state volume
 ./sandbox.sh build <agent>     rebuild one agent image

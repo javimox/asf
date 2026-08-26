@@ -6,7 +6,6 @@ Podman networks have been created, then releases it by leaving the context.
 """
 from __future__ import annotations
 
-import argparse
 import fcntl
 import hashlib
 import json
@@ -14,10 +13,9 @@ import os
 import re
 import shutil
 import stat
-import sys
 import tempfile
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from ipaddress import IPv4Network, ip_network
 from pathlib import Path
@@ -39,7 +37,6 @@ __all__ = [
     "allocation_lock",
     "host_routes",
     "libvirt_subnets",
-    "main",
     "podman_subnets",
     "release_reservation",
     "reserved_subnets",
@@ -275,7 +272,7 @@ def allocation_lock(
                 if time.monotonic() >= deadline:
                     raise RoutedAllocationError(
                         "timed out waiting for the routed subnet lock"
-                    )
+                    ) from None
                 sleeper(_LOCK_POLL)
             except OSError as exc:
                 raise RoutedAllocationError(
@@ -471,89 +468,6 @@ class RoutedAllocator:
 
     def _command(self, argv: tuple[str, ...], timeout: float) -> str:
         return _run_output(self.runner, argv, timeout)
-
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--session", required=True)
-    parser.add_argument("--count", type=int, default=2)
-    parser.add_argument("--pool", default=str(DEFAULT_POOL))
-    parser.add_argument("--prefix", type=int, default=DEFAULT_PREFIX)
-    parser.add_argument("--avoid", action="append", default=[])
-    parser.add_argument("--engine", default="podman")
-    parser.add_argument("--emit", choices=("shell", "json"), default="shell")
-    parser.add_argument("--no-probe", action="store_true")
-    parser.add_argument("--skip-libvirt", action="store_true")
-    parser.add_argument("--no-reserve", action="store_true")
-    parser.add_argument("--reservation-dir", type=Path, default=reservation_dir())
-    parser.add_argument("--owner-pid", type=int)
-    parser.add_argument("--release", action="store_true")
-    parser.add_argument("--lock-held", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args(argv)
-
-    try:
-        pool = IPv4Network(args.pool, strict=True)
-        avoid: list[IPv4Network] = []
-        for cidr in args.avoid:
-            parsed = ip_network(cidr, strict=False)
-            if not isinstance(parsed, IPv4Network):
-                raise RoutedAllocationError(
-                    f"--avoid is IPv4-only in routed v1: {cidr}"
-                )
-            avoid.append(parsed)
-        lock_context = (
-            nullcontext()
-            if args.lock_held
-            else allocation_lock(args.reservation_dir)
-        )
-        with lock_context:
-            if args.release:
-                release_reservation(args.reservation_dir, args.session)
-                return 0
-            if not args.no_probe:
-                avoid.extend(podman_subnets(args.engine))
-                avoid.extend(host_routes())
-                if not args.skip_libvirt:
-                    avoid.extend(libvirt_subnets())
-            if not args.no_reserve:
-                if args.owner_pid is None or args.owner_pid <= 0:
-                    raise RoutedAllocationError(
-                        "--owner-pid is required when creating a reservation"
-                    )
-                avoid.extend(
-                    reserved_subnets(args.reservation_dir, args.session)
-                )
-                release_reservation(args.reservation_dir, args.session)
-            subnets = allocate(
-                args.session,
-                args.count,
-                pool,
-                args.prefix,
-                avoid,
-            )
-            if not args.no_reserve:
-                write_reservation(
-                    args.reservation_dir,
-                    args.session,
-                    pool,
-                    args.prefix,
-                    subnets,
-                    owner_pid=args.owner_pid,
-                )
-    except (ValueError, ValidationError, RoutedAllocationError) as exc:
-        print(f"subnet allocation failed: {exc}", file=sys.stderr)
-        return 1
-
-    if args.emit == "json":
-        print(json.dumps([str(item) for item in subnets]))
-    else:
-        for index, subnet in enumerate(subnets):
-            print(f"ASF_SUBNET_{index}={subnet}")
-            print(f"ASF_SUBNET_{index}_GATEWAY_IP={subnet.network_address + 1}")
-            print(f"ASF_SUBNET_{index}_ROUTER_IP={subnet.network_address + 2}")
-            print(f"ASF_SUBNET_{index}_RUNTIME_IP={subnet.network_address + 10}")
-    return 0
 
 
 def _pid_alive(pid: object) -> bool:

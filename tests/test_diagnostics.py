@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from asf.cli import main
-from asf.diagnostics import DiagnosticsError, run_diagnostic_command
+from asf.diagnostics import run_diagnostic_command
 from asf.egress_evidence import begin_egress_session
+from asf.runs import begin_run
 from asf.paths import RepoPaths
 from asf.session import AmbiguousSessionError
 from asf.podman import PodmanClient
@@ -182,6 +183,7 @@ class ProxyDiagnosticTests(unittest.TestCase):
         self.assertTrue(config.stdout.startswith(":3128"))
 
     def test_logs_read_session_file_and_follow_without_spawning_a_shell(self) -> None:
+        begin_run(self.paths, "claude")
         context = begin_egress_session(self.paths, "claude", ("github.com",))
         context.access_log_path.write_text(
             '{"request":{"method":"CONNECT","host":"github.com:443"}}\n',

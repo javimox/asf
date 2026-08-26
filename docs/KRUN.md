@@ -107,7 +107,7 @@ Destination-only access:
 network:
   mode: routed
   allow:
-    - cidr: 192.168.252.2/32
+    - cidr: 192.0.2.10/32
 ```
 
 This allows all IP traffic to that destination/CIDR.
@@ -118,7 +118,7 @@ Restricted access:
 network:
   mode: routed
   allow:
-    - cidr: 192.168.252.2/32
+    - cidr: 192.0.2.10/32
       protocol: tcp
       ports: [22, 443]
 ```
@@ -146,11 +146,11 @@ Controlled acceptance tests can add a live positive/negative check:
 network:
   mode: routed
   allow:
-    - cidr: 192.168.252.2/32
+    - cidr: 192.0.2.10/32
       protocol: tcp
       ports: [18080]
   verify:
-    address: 192.168.252.2
+    address: 192.0.2.10
     protocol: tcp
     port: 18080
     blocked_port: 19999
@@ -236,11 +236,29 @@ Use:
 ```
 
 This reports the session-start policy snapshot, host-side process capability
-state, lifecycle events, and LiteLLM request metadata. Packet payloads and LLM
-response bodies are not captured. Prompt bodies are recorded only when
+state, lifecycle events, LiteLLM request metadata, and the status/path of any
+on-demand routed PCAP captures. LLM response bodies are not captured. Prompt bodies are recorded
+only when
 `observability.llm_prompts: true` is explicitly enabled.
 
 See [OBSERVABILITY.md](OBSERVABILITY.md).
+
+## Design decisions
+
+These are the stable decisions behind ASF microVM isolation; new work should
+not add network paths without a concrete requirement.
+
+- Only the untrusted workload runs in libkrun/KVM.
+- Trusted ASF services remain rootless Podman containers.
+- Routed mode uses one TAP-backed guest NIC and no guest default route.
+- The long-lived routed gateway has no capabilities.
+- A short-lived initializer receives `NET_ADMIN`, configures TAP/nftables, then exits.
+- `NET_RAW` is the only guest capability opt-in.
+- Routed LiteLLM access is a narrow broker `/32` route with TCP/4000 only.
+- Routed mode uses the locally built TAP-capable crun under `tools/krun-runtime/`;
+  ASF commits its upstream pin and build recipe, while the executable is
+  git-ignored. `CRUN_TAP_RUNTIME` is only a development override.
+- The current TAP and broker topology is frozen.
 
 ## Validation status
 
@@ -256,6 +274,7 @@ Manual acceptance has demonstrated:
 - guest `NET_RAW` opt-in without capability leakage to the VMM;
 - capability-less broker and long-lived gateway.
 
-The routed TAP, broker, and passive network-observer topology is frozen. The
-focused `tests/test_krun_tap_ci.sh` job verifies only the TAP-capable crun
-boundary; broader ASF feature-flow testing remains separate.
+The routed TAP and broker topology is frozen. On-demand packet capture stays
+outside the guest and does not alter enforcement. The focused
+`tests/test_krun_tap_ci.sh` job verifies only the TAP-capable crun boundary;
+broader ASF feature-flow testing remains separate.

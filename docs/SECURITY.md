@@ -8,8 +8,7 @@ boundary itself are the most valuable contribution this project can receive.
 Please **do not** open a public issue for a suspected vulnerability. Use
 GitHub's *Report a vulnerability* (private security advisory) on this
 repository instead. Include the ASF version (`./sandbox.sh --version`), your
-Podman version, the network mode, and — ideally — a reproducing spike script
-in the style of `tests/experiments/`.
+Podman version, the network mode, and — ideally — a reproducing script.
 
 Coordinated disclosure is appreciated; a fix, a regression test, and an entry in BUGS.md
 will credit the reporter unless anonymity is requested.

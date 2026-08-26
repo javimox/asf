@@ -123,7 +123,6 @@ class NetworkPolicy:
 @dataclass(frozen=True, slots=True)
 class ObservabilitySettings:
     llm_prompts: bool = False
-    network_activity: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,7 +10,7 @@ import os
 import platform
 import re
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path
 from typing import Sequence, TextIO
@@ -43,7 +43,7 @@ __all__ = [
     "validate_capability_boundary",
 ]
 
-ROUTED_GATEWAY_IMAGE_REV = "v2"
+ROUTED_GATEWAY_IMAGE_REV = "v3"
 ROUTED_GATEWAY_IMAGE_BASE = (
     "docker.io/library/alpine@sha256:"
     "d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc"
@@ -819,7 +819,7 @@ class RoutedService:
     def _ensure_image(self, *, output: TextIO) -> str:
         material = (
             f"{ROUTED_GATEWAY_IMAGE_REV}|{ROUTED_GATEWAY_IMAGE_BASE}|"
-            "iproute2|nftables|signal-aware-holder-v1"
+            "iproute2|nftables|tcpdump|signal-aware-holder-v1"
         )
         fingerprint = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
         tag = f"asf-routed-gateway:{fingerprint}"
@@ -839,7 +839,7 @@ class RoutedService:
             holder.chmod(0o755)
             (root / "Containerfile").write_text(
                 f"FROM {ROUTED_GATEWAY_IMAGE_BASE}\n"
-                "RUN apk add --no-cache iproute2 nftables\n"
+                "RUN apk add --no-cache iproute2 nftables tcpdump\n"
                 "COPY asf-gateway-holder /usr/local/bin/asf-gateway-holder\n"
                 "ENTRYPOINT []\n"
                 'CMD ["/usr/local/bin/asf-gateway-holder"]\n',

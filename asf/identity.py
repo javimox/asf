@@ -2,12 +2,12 @@
 
 Resource names are a permanent contract: sessions must produce the same names
 across versions so that any ASF invocation can discover and clean up resources
-created by an earlier one. The golden vectors in ``tests/parity/`` pin them.
+created by an earlier one. The reference vectors in ``tests/reference/`` pin them.
 
 Two naming risks cannot be verified on Linux and must be checked on macOS:
 
 * BSD ``tr -c`` complements byte values and should agree with GNU, but the
-  golden fixtures freeze whichever one generated them.
+  reference fixtures freeze whichever one generated them.
 * ``cd && pwd -P`` returns the case stored on disk; ``Path.resolve`` keeps the
   caller's spelling. On APFS a mis-cased invocation hashes differently.
 """
@@ -22,12 +22,14 @@ from pathlib import Path
 from typing import Final, Literal, Sequence
 
 from .errors import ValidationError
+from .models import RuntimeManifest
 
 __all__ = [
     "CheckoutPathError",
     "InvalidNameError",
     "NetworkNames",
     "ResourceIdentity",
+    "state_volume_names",
     "sanitize_checkout_basename",
     "validate_runtime_name",
 ]
@@ -102,7 +104,7 @@ class ResourceIdentity:
         """Create an identity from an already-canonical absolute path.
 
         This filesystem-independent constructor is intended for differential
-        and golden-vector tests. Production code should use ``from_checkout``.
+        and reference-vector tests. Production code should use ``from_checkout``.
         """
 
         path_text = os.fspath(physical_path)
@@ -113,7 +115,7 @@ class ResourceIdentity:
         if not os.path.isabs(path_text):
             raise CheckoutPathError(f"checkout path must be absolute: {path_text!r}")
         # `pwd -P` never emits `..`, `.`, or a trailing slash. Rejecting them
-        # keeps an unreachable path out of the golden fixtures.
+        # keeps an unreachable path out of the reference fixtures.
         if os.path.normpath(path_text) != path_text:
             raise CheckoutPathError(
                 f"checkout path must already be canonical: {path_text!r}"
@@ -146,7 +148,7 @@ class ResourceIdentity:
         """Whether the prefix is a legal Podman resource name.
 
         A checkout named ``.asf`` or ``_worktree`` survives sanitization but
-        Podman rejects it. Checked on demand, so golden vectors can still
+        Podman rejects it. Checked on demand, so reference vectors can still
         record what Bash produces for such a checkout.
         """
 
@@ -253,7 +255,7 @@ class ResourceIdentity:
             raise InvalidNameError(f"invalid probe image revision: {revision!r}")
         return f"{self.prefix}-probe:{revision}"
 
-    # ── parity support ───────────────────────────────────────────────────────
+    # ── reference-vector support ───────────────────────────────────────────────────────
 
     def snapshot(
         self,
@@ -263,7 +265,7 @@ class ResourceIdentity:
         owner_pid: int | None = None,
         state_keys: Sequence[str] = (),
     ) -> dict[str, object]:
-        """Return a deterministic, JSON-friendly parity-test snapshot.
+        """Return a deterministic, JSON-friendly reference-vector snapshot.
 
         ``state_keys`` are sorted so a caller's ordering cannot change the
         result. PID-scoped names appear only when ``owner_pid`` is given.
@@ -374,3 +376,21 @@ def _validate_pid(owner_pid: int) -> int:
     if isinstance(owner_pid, bool) or not isinstance(owner_pid, int) or owner_pid <= 0:
         raise InvalidNameError(f"owner PID must be a positive integer: {owner_pid!r}")
     return owner_pid
+
+
+def state_volume_names(
+    identity: ResourceIdentity,
+    runtime: str,
+    manifest: RuntimeManifest,
+) -> tuple[str, ...]:
+    """Return exactly the persistent volumes owned by ``reset``.
+
+    Manifest-declared state volumes retain manifest order and shell history is
+    always last. Names come from deterministic resource identity, never from a
+    broad Podman listing.
+    """
+
+    return tuple(
+        identity.state_volume(runtime, entry.key)
+        for entry in manifest.state_volumes
+    ) + (identity.shell_history_volume(runtime),)

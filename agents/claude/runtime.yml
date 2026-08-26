@@ -35,8 +35,6 @@ llm:
 observability:
   # true stores full broker-visible prompts on the host (0600).
   llm_prompts: false
-  # routed+microvm only; records TCP SYN, UDP and ICMP echo attempts, no payloads.
-  network_activity: false
 
 # Network policy is agent-agnostic: choose one mode and keep only that mode's
 # fields active. Proxy is the usual default for interactive agents.

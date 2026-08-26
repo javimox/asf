@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scripted stand-in for `podman`, for the stop-command parity vectors.
+"""Scripted stand-in for `podman`, for the stop-command reference vectors.
 
 Covers the subcommands `stop` uses on both sides of the migration: listing,
 inspection, and the three removals. Unlike the read-only fakes in earlier

@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from asf.runs import begin_run, prune_runs, runs_root
 from asf.egress_evidence import (
     ADVICE_WINDOW,
     EgressEvidenceError,
@@ -61,12 +62,14 @@ class EgressEvidenceTests(unittest.TestCase):
         )
 
     def record(self, lines: list[str], *, allowlisted=("sentry.io", "statsig.com")):
+        begin_run(self.paths, "claude")
         context = begin_egress_session(self.paths, "claude", allowlisted)
         mark_egress_session_active(self.paths, "claude")
         context.access_log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return context, finalize_egress_session(self.paths, "claude")
 
     def test_teardown_parses_connects_and_excludes_startup_probes(self) -> None:
+        begin_run(self.paths, "claude")
         context = begin_egress_session(
             self.paths, "claude", ("sentry.io", "statsig.com")
         )
@@ -95,11 +98,12 @@ class EgressEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence.denied_connects, {"registry.npmjs.org": 2})
         self.assertEqual(evidence.ignored_probe_connects, 1)
         self.assertEqual(evidence.malformed_lines, 1)
-        self.assertTrue((context.directory / "summary.json").is_file())
+        self.assertTrue((context.metadata_path.parent / "egress-summary.json").is_file())
         self.assertTrue(context.access_log_path.is_file())
         self.assertEqual(len(load_evidence_history(self.paths, "claude")), 1)
 
     def test_aborted_start_is_not_counted_and_finalize_is_idempotent(self) -> None:
+        begin_run(self.paths, "claude")
         context = begin_egress_session(
             self.paths, "claude", ("sentry.io", "statsig.com")
         )
@@ -109,26 +113,27 @@ class EgressEvidenceTests(unittest.TestCase):
         self.assertEqual(load_evidence_history(self.paths, "claude"), ())
         self.assertFalse(context.directory.exists())
 
-    def test_new_session_refuses_to_overwrite_unfinished_evidence(self) -> None:
+    def test_evidence_requires_a_run_and_is_unique_per_run(self) -> None:
+        with self.assertRaisesRegex(EgressEvidenceError, "no session run"):
+            begin_egress_session(self.paths, "claude", ("sentry.io",))
+        begin_run(self.paths, "claude")
         begin_egress_session(self.paths, "claude", ("sentry.io",))
-        with self.assertRaisesRegex(EgressEvidenceError, "unfinished egress evidence"):
+        with self.assertRaisesRegex(EgressEvidenceError, "already exists"):
             begin_egress_session(self.paths, "claude", ("sentry.io",))
 
-    def test_history_and_raw_session_directories_have_separate_bounds(self) -> None:
-        with (
-            mock.patch("asf.egress_evidence._MAX_HISTORY", 3),
-            mock.patch("asf.egress_evidence._MAX_RAW_SESSIONS", 2),
-        ):
+    def test_history_outlives_pruned_run_directories(self) -> None:
+        with mock.patch("asf.egress_evidence._MAX_HISTORY", 3):
             first, _ = self.record([self.entry("sentry.io:443", 200)])
             second, _ = self.record([self.entry("sentry.io:443", 200)])
             third, _ = self.record([self.entry("sentry.io:443", 200)])
+        prune_runs(self.paths, "claude", keep=2)
 
         history = load_evidence_history(self.paths, "claude")
         self.assertEqual(
             [item.session_id for item in history],
             [first.session_id, second.session_id, third.session_id],
         )
-        self.assertFalse(first.directory.exists())
+        self.assertFalse((runs_root(self.paths, "claude") / first.session_id).exists())
         self.assertTrue(second.directory.is_dir())
         self.assertTrue(third.directory.is_dir())
 

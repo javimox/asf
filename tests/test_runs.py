@@ -1,4 +1,4 @@
-"""Focused tests for per-run observability directories."""
+"""Focused tests for private per-run evidence directories."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asf.observation_sessions import (
-    begin_observation_session,
-    current_observation_session,
-    observation_artifact,
-    read_observation_policy,
-    write_observation_policy,
+from asf.runs import (
+    begin_run,
+    current_run,
+    run_artifact,
+    read_run_policy,
+    write_run_policy,
 )
 from asf.manifest import parse
 from asf.paths import RepoPaths
@@ -28,21 +28,21 @@ def make_paths(root: Path) -> RepoPaths:
     return RepoPaths.for_root(root)
 
 
-class ObservationSessionTests(unittest.TestCase):
+class RunTests(unittest.TestCase):
     def test_each_open_gets_its_own_private_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asf"
             root.mkdir()
             paths = make_paths(root)
 
-            first = begin_observation_session(paths, "hermes")
+            first = begin_run(paths, "hermes")
             record_session_event(paths, "hermes", "session_start")
-            first_events = observation_artifact(paths, "hermes", "events.jsonl")
+            first_events = run_artifact(paths, "hermes", "events.jsonl")
             self.assertEqual(first_events.parent, first.directory)
 
-            second = begin_observation_session(paths, "hermes")
+            second = begin_run(paths, "hermes")
             record_session_event(paths, "hermes", "session_start")
-            second_events = observation_artifact(paths, "hermes", "events.jsonl")
+            second_events = run_artifact(paths, "hermes", "events.jsonl")
 
             self.assertNotEqual(first.session_id, second.session_id)
             self.assertNotEqual(first.directory, second.directory)
@@ -51,7 +51,7 @@ class ObservationSessionTests(unittest.TestCase):
             self.assertEqual(first.directory.stat().st_mode & 0o777, 0o700)
             self.assertEqual(second.directory.stat().st_mode & 0o777, 0o700)
             self.assertEqual(
-                current_observation_session(paths, "hermes").session_id,
+                current_run(paths, "hermes").session_id,
                 second.session_id,
             )
 
@@ -71,7 +71,7 @@ class ObservationSessionTests(unittest.TestCase):
                     "capabilities": ["net_raw"],
                 }
             )
-            begin_observation_session(paths, "hermes")
+            begin_run(paths, "hermes")
             plan = build_runtime_plan(
                 manifest,
                 paths=paths,
@@ -83,8 +83,8 @@ class ObservationSessionTests(unittest.TestCase):
                     IPv4Network("10.79.1.0/24"),
                 ),
             )
-            policy_path = write_observation_policy(paths, plan, manifest)
-            policy = read_observation_policy(paths, "hermes")
+            policy_path = write_run_policy(paths, plan, manifest)
+            policy = read_run_policy(paths, "hermes")
 
             self.assertEqual(policy.isolation, "microvm")
             self.assertEqual(policy.network_mode, "routed")

@@ -380,26 +380,27 @@ the ordering fixed.
 
 ## 7. Evidence
 
-All measured on Podman 6.0.1, rootless, netavark. Production host tests and
-comparison experiments are kept separate.
+All measured on Podman 6.0.1, rootless, netavark. Production host tests live
+on `main`. The Tinyproxy/Caddy comparison, other design spikes, and stand-alone
+diagnostic scripts are preserved on the archival `research-spikes` branch.
 
 | Test or experiment | Covers |
 |---|---|
-| `tests/test_caddy_proxy_paths.sh` | production Caddy: both request paths |
-| `tests/experiments/compare-tinyproxy-caddy.sh` | comparative evidence: Tinyproxy positive control vs Caddy |
+| `tests/test_caddy_proxy_paths.sh` (main) | production Caddy: both request paths |
+| Tinyproxy/Caddy comparison (`research-spikes`) | archived comparative evidence: Tinyproxy positive control vs Caddy |
 | `tests/experiments/spike-gateway.sh` | routed stage 1: controlled targets |
 | `tests/experiments/spike-rootless-gateway-stage2.sh` | routed stage 2: real LAN / VM |
 | `tests/experiments/spike-combined-internal-routed-v2.sh` | internal + routed together |
 
-### Proxy — both request paths (`tests/experiments/compare-tinyproxy-caddy.sh`)
+### Proxy — both request paths (archived on `research-spikes`)
 
 | Proxy | plain HTTP | host ACL | port restriction |
 |---|---|---|---|
 | **Caddy** + forwardproxy | supported | enforced | **enforced on both paths** |
 | tinyproxy | supported | enforced | **bypassable** (`ConnectPort` = CONNECT only) |
 
-tinyproxy runs as a positive control: if its known bypass is not detected, the
-suite is broken and its other verdicts are worthless.
+In the archived comparison, tinyproxy acts as a positive control: if its known
+bypass is not detected, the comparison is not trustworthy.
 
 ### Routed — stage 1, controlled targets (`tests/experiments/spike-gateway.sh`), 47/47
 

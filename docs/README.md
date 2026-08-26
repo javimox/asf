@@ -26,7 +26,7 @@ implementation material lives here.
 - [Dev Container integration](DEVCONTAINER.md) — how the default ASF backend
   uses the Dev Container CLI with Podman
 - [microVM isolation](KRUN.md) — optional KVM isolation for the agent workload (krun backend)
-- [observability](OBSERVABILITY.md) — host-side session, LLM, privilege, and routed-attempt metadata
+- [observability](OBSERVABILITY.md) — host-side session, LLM, privilege, and routed PCAP evidence
 - [Dependencies](DEPENDENCIES.md) — pinned dependencies and SBOM scope
 
 ## Development
@@ -35,3 +35,5 @@ implementation material lives here.
 - [Releasing](RELEASING.md) — release preparation and checks
 - [Security policy](SECURITY.md) — reporting security issues
 - [Known bugs](BUGS.md) — currently known limitations or defects
+- [Release history](RELEASES.md) — released ASF versions and detailed notes
+- [Changes in ASF 2.0](CHANGES-v2.0.md) — release changes and upgrade notes

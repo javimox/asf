@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-sandboxing-framework"
-version = "1.0"
+version = "2.0"
 license = "BSD-4-Clause"
 description = "Rootless-Podman isolation and controlled egress for AI agents"
 readme = "README.md"

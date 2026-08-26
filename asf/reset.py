@@ -16,9 +16,8 @@ from enum import Enum
 
 from .cleanup import CleanupExecutor, CleanupReport
 from .errors import InfrastructureError, UsageError, ValidationError
-from .identity import ResourceIdentity
+from .identity import state_volume_names
 from .manifest import load_model
-from .models import RuntimeManifest
 from .ownership import Resource, ResourceKind
 from .paths import RepoPaths
 from .podman import ObjectKind, PodmanClient, PodmanError
@@ -32,7 +31,6 @@ __all__ = [
     "ResetReport",
     "ResetService",
     "ResetUsageError",
-    "state_volume_names",
     "run_reset_command",
 ]
 
@@ -67,23 +65,6 @@ class ResetDisposition(str, Enum):
             ResetDisposition.NOTHING_TO_CLEAR,
         }
 
-
-def state_volume_names(
-    identity: ResourceIdentity,
-    runtime: str,
-    manifest: RuntimeManifest,
-) -> tuple[str, ...]:
-    """Return exactly the persistent volumes owned by ``reset``.
-
-    Manifest-declared state volumes retain manifest order and shell history is
-    always last. Names come from deterministic resource identity, never from a
-    broad Podman listing.
-    """
-
-    return tuple(
-        identity.state_volume(runtime, entry.key)
-        for entry in manifest.state_volumes
-    ) + (identity.shell_history_volume(runtime),)
 
 
 @dataclass(frozen=True, slots=True)

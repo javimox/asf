@@ -19,10 +19,9 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from pathlib import Path
 
 from .atomic import write_text_atomic
-from .cleanup import CleanupError, CleanupExecutor, CleanupOutcome, CleanupReport
+from .cleanup import CleanupError, CleanupExecutor, CleanupReport
 from .egress_evidence import EgressEvidenceError, finalize_egress_session
 from .errors import InfrastructureError, UsageError, ValidationError
 from .ownership import Resource, ResourceKind, teardown_sequence
@@ -30,6 +29,7 @@ from .paths import RepoPaths
 from .podman import PodmanClient
 from .residue import ResidueScanner, SessionResidue
 from .session_lock import AcquiredSessionLock
+from .runs import current_run
 from .session_events import record_session_event
 from .session import (
     RuntimeSession,
@@ -278,8 +278,8 @@ _GROUPS: tuple[tuple[str, tuple[ResourceKind, ...], str, str], ...] = (
     (
         "network-observer",
         (ResourceKind.NETWORK_OBSERVER_CONTAINER,),
-        "Stopping and removing network observer",
-        "Network observer removed",
+        "Stopping and removing packet capture",
+        "Packet capture removed",
     ),
     (
         "gateway",
@@ -447,8 +447,11 @@ class StopService:
         if self.paths is None:
             return
         try:
-            destination = self.paths.session_artifact(
-                report.runtime, "cleanup-report.json"
+            run = current_run(self.paths, report.runtime)
+            destination = (
+                run.directory / "cleanup-report.json"
+                if run is not None
+                else self.paths.session_artifact(report.runtime, "cleanup-report.json")
             )
             payload = (
                 json.dumps(report.to_json_dict(), indent=2, sort_keys=True) + "\n"
