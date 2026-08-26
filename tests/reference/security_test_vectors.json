@@ -4,7 +4,7 @@
   "notes": [
     "13 of 17 vectors are byte-identical to Bash. The remaining ones carry a `divergence` note and keep the Bash bytes alongside as bash_*; every one of them is an infrastructure-failure scenario, where Bash could not tell a probe that failed to run from a policy decision.",
     "No scenario in which Bash passed now fails, and no scenario in which Bash failed now passes: the divergences change what a failure says, and in infra-inspect-fails how many checks it counts.",
-    "The engine is a scripted fake (tests/parity/fake_podman_security.py). Each vector's `exec` table is matched in order against the joined in-container command, so one probe can fail while every other check still runs."
+    "The engine is a scripted fake (tests/reference/fake_podman_security.py). Each vector's `exec` table is matched in order against the joined in-container command, so one probe can fail while every other check still runs."
   ],
   "manifests": {
     "proxy-agent": "name: proxy-agent\nadapter: generic\nllm:\n  broker: true\n  protocol: anthropic\n  provider: anthropic\n  api_key_env: ANTHROPIC_API_KEY\n  direct_domain: api.anthropic.com\nsecrets:\n  files:\n    - proxy-agent.env\nnetwork:\n  mode: proxy\n  allow_domains:\n    - api.anthropic.com\n    - statsig.com\n    - sentry.io\n  verify_domain: statsig.com\n",

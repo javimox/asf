@@ -4,7 +4,7 @@
   "notes": [
     "14 of 17 vectors are byte-identical to Bash. The rest carry a `divergence` note and keep the Bash bytes as bash_*.",
     "Elapsed seconds are tokenised: `_cleanup_action` prints wall-clock time, so a byte-exact comparison would be a race against the clock.",
-    "The engine is a scripted fake (tests/parity/fake_podman_stop.py) that mutates, so `remaining` proves what each implementation actually left.",
+    "The engine is a scripted fake (tests/reference/fake_podman_stop.py) that mutates, so `remaining` proves what each implementation actually left.",
     "Every divergence makes Python stricter: it removes something Bash left, or it reports a failure Bash reported as success. None goes the other way."
   ],
   "manifests": {

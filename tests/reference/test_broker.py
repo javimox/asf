@@ -15,7 +15,7 @@ FIXTURE = Path(__file__).with_name("broker_vectors.json")
 IMAGE = "ghcr.io/berriai/litellm:v1.93.0"
 
 
-class BrokerConfigurationParityTests(unittest.TestCase):
+class BrokerConfigurationReferenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
