@@ -223,6 +223,7 @@ def _format_network_observer(session) -> str:
         return ""
     return _format_process("packet capture", observer.inspect)
 
+
 def _prompt_capture_note(paths: RepoPaths, runtime: str, enabled: bool) -> str:
     if not enabled:
         return ""
