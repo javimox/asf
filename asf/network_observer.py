@@ -24,8 +24,7 @@ __all__ = [
 ]
 
 _CAPTURE_INTERFACE = "tap0"
-_CAPTURE_SNAPLEN = 256
-_CAPTURE_PACKET_LIMIT = 200_000
+_CAPTURE_SNAPLEN = 0
 _STOP_TIMEOUT = 5
 _USAGE = "Usage: ./sandbox.sh capture {start|stop} [agent]\n"
 
@@ -239,8 +238,6 @@ class NetworkCaptureService:
             _CAPTURE_INTERFACE,
             "-s",
             str(_CAPTURE_SNAPLEN),
-            "-c",
-            str(_CAPTURE_PACKET_LIMIT),
             "-U",
             "-w",
             "/asf/network.pcap",

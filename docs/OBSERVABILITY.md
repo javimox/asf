@@ -108,15 +108,19 @@ ASF runs `tcpdump` in a separate container sharing the routed gateway network
 namespace. It captures `tap0` with `NET_RAW` only; the long-lived gateway
 remains capability-less and the guest receives no additional capability.
 
-The capture uses a 256-byte snapshot length and stops after 200,000 packets,
-which bounds host disk use for an unattended capture. ASF does not parse,
+The capture stores full packets (`tcpdump -s 0`) and continues until explicitly
+stopped, the session ends, or the capture helper exits. ASF does not parse,
 classify, deduplicate, or reinterpret packet contents. `observe` reports only
-whether capture is active, how many PCAPs exist, the latest/current file and a
-`tcpdump -r` command. Use `tcpdump` or Wireshark for packet analysis.
+whether capture is active, how many PCAPs
+exist, the latest/current file and a `tcpdump -r` command. Use `tcpdump` or
+Wireshark for packet analysis.
 
 The PCAP is sensitive evidence. It can contain packet payloads and, when broker
-traffic traverses the TAP, broker traffic as well. Treat the session directory
-accordingly.
+traffic traverses the TAP, broker traffic as well. Plaintext protocols may
+therefore expose complete request and response bodies; HTTPS application
+payloads remain encrypted at the TAP boundary. Capture has no packet-count or
+file-size limit, so an unattended capture can consume substantial disk space.
+Treat the session directory accordingly.
 
 Packet capture is evidence, not enforcement. Routed nftables policy remains the
 authoritative traffic-control mechanism. A capture failure does not stop the
