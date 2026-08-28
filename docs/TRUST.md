@@ -101,20 +101,21 @@ capability-less by default.
 - **Leftovers.** Runtime and support containers, networks, routed reservation,
   and the temporary provider secret are removed on exit; only declared state
   volumes persist. Generated session configuration remains under
-  `.devcontainer/sessions/` for diagnostics and deterministic reuse:
-  `runtime-plan.json` (the immutable topology) at the session level, and
-  under `runs/<session-id>/` the per-run records `policy.json`,
-  `events.jsonl`, `verification-report.json` (every startup policy check,
-  its verdict, and whether it was blocking), and `cleanup-report.json`
-  (every teardown action and its outcome). The
-  records are redaction-safe diagnostics; writing them can never change
-  a security or cleanup verdict. With `CADDY_ACCESS_LOGS=true`, proxy sessions
-  additionally retain bounded Caddy request metadata and a counted
-  `egress-summary.json`. Sensitive credential headers are redacted by Caddy, but host,
-  method, timing, and other request metadata remain visible; disable the option
-  where that retention is inappropriate. Compact summaries cover the latest
-  100 completed proxy sessions; raw logs are retained only for the latest 12.
-  `./sandbox.sh advise <agent>` reads the 12-session advice window.
+  `.devcontainer/sessions/` for diagnostics and deterministic reuse. Per-run
+  host evidence is stored separately under
+  `${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/`
+  and is not mounted into the agent runtime by ASF. It includes `policy.json`,
+  `events.jsonl`, `verification-report.json` (every startup policy check, its
+  verdict, and whether it was blocking), and `cleanup-report.json` (every
+  teardown action and its outcome). With `CADDY_ACCESS_LOGS=true`, proxy
+  sessions additionally retain bounded Caddy request metadata and a counted
+  `egress-summary.json`. Sensitive credential headers are redacted by Caddy,
+  but host, method, timing, and other request metadata remain visible; disable
+  the option where that retention is inappropriate. Prompt logs and PCAPs are
+  sensitive evidence when explicitly enabled. Compact summaries cover the
+  latest 100 completed proxy sessions in the same host-state session tree; raw
+  logs are retained only for the latest 12. `./sandbox.sh advise <agent>` reads
+  the 12-session advice window.
 
 ## The complete privilege list
 

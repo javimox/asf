@@ -10,6 +10,7 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from asf.cli import main
 from asf.diagnostics import run_diagnostic_command
@@ -29,7 +30,8 @@ def make_checkout(root: Path) -> RepoPaths:
         directory = agents / runtime
         directory.mkdir(parents=True)
         (directory / "runtime.yml").write_text(f"name: {runtime}\n")
-    return RepoPaths.for_root(root)
+    with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
+        return RepoPaths.for_root(root)
 
 
 def inspection(

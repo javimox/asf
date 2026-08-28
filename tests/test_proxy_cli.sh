@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+export XDG_STATE_HOME="$TMP/state"
 cp -a "$ROOT/." "$TMP/asf"
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/podman" <<'EOF'
@@ -32,15 +33,22 @@ EOF
 chmod +x "$TMP/bin/podman"
 
 RUN_ID="20260803T000000Z-0badcafe"
-RUN_DIR="$TMP/asf/.devcontainer/sessions/claude/runs/$RUN_ID"
+RUNS_DIR=$(cd "$TMP/asf" && python3 - <<'PY_RUNS'
+from asf.paths import RepoPaths
+from asf.runs import runs_root
+
+print(runs_root(RepoPaths.for_root("."), "claude"))
+PY_RUNS
+)
+RUN_DIR="$RUNS_DIR/$RUN_ID"
 mkdir -p "$RUN_DIR/caddy"
-printf '%s\n' "$RUN_ID" > "$TMP/asf/.devcontainer/sessions/claude/runs/current"
+printf '%s\n' "$RUN_ID" > "$RUNS_DIR/current"
 printf '%s\n' '{"request":{"method":"CONNECT","host":"github.com:443"}}' > "$RUN_DIR/caddy/caddy-access.jsonl"
 cat > "$RUN_DIR/egress-metadata.json" <<EOF
 {
   "active": true,
   "allowlisted_domains": ["github.com"],
-  "directory": ".devcontainer/sessions/claude/runs/$RUN_ID/caddy",
+  "directory": "caddy",
   "runtime": "claude",
   "session_id": "$RUN_ID",
   "started_at": "2026-08-03T00:00:00Z"

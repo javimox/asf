@@ -48,7 +48,8 @@ llm:
   api_key_env: OPENAI_API_KEY
 """
     )
-    return RepoPaths.for_root(root)
+    with patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
+        return RepoPaths.for_root(root)
 
 
 def inspection(container_id: str, name: str, role: str, pid: int) -> str:
@@ -122,6 +123,11 @@ class ObserveTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         root = Path(self.temporary.name) / "asf"
         root.mkdir()
+        self.environment = patch.dict(
+            os.environ, {"XDG_STATE_HOME": str(Path(self.temporary.name) / "state")}
+        )
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
         self.paths = make_checkout(root)
         self.observation = begin_run(self.paths, "hermes")
         self._snapshot_policy()

@@ -451,7 +451,9 @@ class StopService:
             destination = (
                 run.directory / "cleanup-report.json"
                 if run is not None
-                else self.paths.session_artifact(report.runtime, "cleanup-report.json")
+                else self.paths.state_artifact(
+                    report.runtime, "cleanup-report.json"
+                )
             )
             payload = (
                 json.dumps(report.to_json_dict(), indent=2, sort_keys=True) + "\n"

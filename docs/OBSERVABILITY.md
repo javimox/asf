@@ -22,7 +22,7 @@ Each `open` mints one session id and one private directory that holds every
 host-side artifact for that run:
 
 ```text
-.devcontainer/sessions/<agent>/runs/<session-id>/
+${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/<session-id>/
   policy.json               frozen isolation/network/capability policy
   events.jsonl              lifecycle events
   verification-report.json  startup verification verdicts
@@ -37,8 +37,14 @@ host-side artifact for that run:
 
 `runs/current` names the latest session id. Directories are mode `0700`; files
 and the pointer are mode `0600`. The newest 12 runs are kept; older ones are
-removed when the next session starts. `runtime-plan.json` and
-`egress-history.json` stay at the session level because they outlive a run.
+removed when the next session starts. ASF uses `$XDG_STATE_HOME` when it is an
+absolute path and otherwise falls back to `~/.local/state`. The checkout-specific
+state tree is outside the repository and ASF never mounts it into the agent
+runtime. `egress-history.json` is kept alongside `runs/` at the host-state
+session level because it outlives a run; `runtime-plan.json` remains in the
+checkout session directory. Legacy checkout-local `runs/` directories and
+`egress-history.json` are ignored and can be removed after any evidence you
+want to keep has been archived.
 
 Caddy is bind-mounted only on the `caddy/` subdirectory, and LiteLLM only on
 its two `.jsonl` files; neither container can reach the rest of the run.
@@ -120,7 +126,7 @@ traffic traverses the TAP, broker traffic as well. Plaintext protocols may
 therefore expose complete request and response bodies; HTTPS application
 payloads remain encrypted at the TAP boundary. Capture has no packet-count or
 file-size limit, so an unattended capture can consume substantial disk space.
-Treat the session directory accordingly.
+Treat the host-side run directory accordingly.
 
 Packet capture is evidence, not enforcement. Routed nftables policy remains the
 authoritative traffic-control mechanism. A capture failure does not stop the

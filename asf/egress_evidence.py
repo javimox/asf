@@ -181,7 +181,7 @@ def begin_egress_session(
         "started_at": _utc_now(),
         "active": False,
         "allowlisted_domains": list(allowlisted),
-        "directory": str(directory.relative_to(paths.root)),
+        "directory": ACCESS_LOG_DIRNAME,
     }
     _write_json(metadata_path, metadata)
     return _context(paths, run, directory)
@@ -197,7 +197,7 @@ def current_egress_session(
     if loaded is None:
         return None
     run, metadata = loaded
-    return _context(paths, run, _metadata_directory(paths, run, metadata))
+    return _context(paths, run, _metadata_directory(run, metadata))
 
 
 def mark_egress_session_active(paths: RepoPaths, runtime: str) -> None:
@@ -221,7 +221,7 @@ def finalize_egress_session(
     if loaded is None:
         return None
     run, metadata = loaded
-    directory = _metadata_directory(paths, run, metadata)
+    directory = _metadata_directory(run, metadata)
     active = metadata.get("active")
     if not isinstance(active, bool):
         raise EgressEvidenceError("egress evidence active flag must be boolean")
@@ -240,7 +240,7 @@ def finalize_egress_session(
     _write_json(summary, evidence.to_json_dict())
     _append_history(paths, runtime, evidence)
     metadata["state"] = "recorded"
-    metadata["summary"] = str(summary.relative_to(paths.root))
+    metadata["summary"] = _SUMMARY_FILENAME
     _write_json(run.directory / _METADATA_FILENAME, metadata)
     return evidence
 
@@ -277,7 +277,7 @@ def _context(paths: RepoPaths, run: SessionRun, directory: Path) -> EgressSessio
 
 
 def load_evidence_history(paths: RepoPaths, runtime: str) -> tuple[EgressSessionEvidence, ...]:
-    path = paths.session_artifact(runtime, _HISTORY_FILENAME)
+    path = paths.state_artifact(runtime, _HISTORY_FILENAME)
     if not path.exists():
         return ()
     payload = _read_json(path)
@@ -438,7 +438,7 @@ def _append_history(
         history.append(evidence)
         history = history[-_MAX_HISTORY:]
         payload = [item.to_json_dict() for item in history]
-        _write_json(paths.session_artifact(runtime, _HISTORY_FILENAME), payload)
+        _write_json(paths.state_artifact(runtime, _HISTORY_FILENAME), payload)
 
 
 def _access_log_paths(directory: Path) -> tuple[Path, ...]:
@@ -454,19 +454,13 @@ def _access_log_paths(directory: Path) -> tuple[Path, ...]:
     return tuple(sorted(logs, key=lambda item: (item.stat().st_mtime_ns, item.name)))
 
 
-
-
-def _metadata_directory(paths: RepoPaths, run: SessionRun, metadata: dict) -> Path:
+def _metadata_directory(run: SessionRun, metadata: dict) -> Path:
     relative = _required_text(metadata, "directory")
-    expected = run.directory / ACCESS_LOG_DIRNAME
-    try:
-        recorded = paths.child(*Path(relative).parts)
-    except (OSError, ValidationError) as exc:
+    if relative != ACCESS_LOG_DIRNAME:
         raise EgressEvidenceError(
-            f"invalid egress evidence directory: {relative}"
-        ) from exc
-    if recorded != expected:
-        raise EgressEvidenceError("egress evidence directory does not match the current run")
+            "egress evidence directory does not match the current run"
+        )
+    recorded = run.directory / ACCESS_LOG_DIRNAME
     if recorded.is_symlink() or not recorded.is_dir():
         raise EgressEvidenceError(
             f"egress evidence directory is unavailable: {recorded}"

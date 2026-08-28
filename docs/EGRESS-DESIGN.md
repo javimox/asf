@@ -57,7 +57,7 @@ denials. A deny verdict requires Caddy's explicit rejection.
 
 `proxy status` shows the active container, networks, permitted port, and
 allowlisted hosts. `CADDY_ACCESS_LOGS=true` enables JSON access records under
-`.devcontainer/sessions/<agent>/runs/<session-id>/caddy/`. The active file is
+`${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/<session-id>/caddy/`. The active file is
 available through `proxy logs`; Caddy rotates it at 10 MiB and retains two
 uncompressed backups for that session.
 
@@ -70,7 +70,7 @@ so access logging should be disabled when it is not needed.
 At successful teardown ASF parses the session's Caddy logs and stores:
 
 - `egress-summary.json` in the run directory;
-- a bounded `egress-history.json` containing the latest 100 summaries;
+- a bounded host-state `egress-history.json` containing the latest 100 summaries;
 - raw log files and metadata for the latest 12 runs, matching the advice
   window.
 

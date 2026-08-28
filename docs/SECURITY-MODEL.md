@@ -128,7 +128,7 @@ check, not a security property: if it fails *inconclusively* — upstream down,
 5xx — startup continues with an explicit warning, while an outright proxy
 denial of an allowlisted host still aborts as a policy misconfiguration. The
 full check-by-check verdict is persisted to
-`.devcontainer/sessions/<agent>/runs/<session-id>/verification-report.json`. Routed startup
+`${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/<session-id>/verification-report.json`. Routed startup
 exercises TCP end to end; UDP and ICMP rules retain unit coverage. See `agents/isolated-worker/runtime.yml`,
 `agents/routed-scanner/example-runtime-ci-tested.yml`, and [TESTING.md](TESTING.md).
 

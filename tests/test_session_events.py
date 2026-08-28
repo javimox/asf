@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from asf.runs import begin_run, run_artifact
 from asf.paths import RepoPaths
@@ -19,7 +21,10 @@ class SessionEventTests(unittest.TestCase):
             (root / "sandbox.sh").write_text("#!/bin/sh\n")
             (root / "agents").mkdir()
             (root / ".devcontainer").mkdir()
-            paths = RepoPaths.for_root(root)
+            with mock.patch.dict(
+                os.environ, {"XDG_STATE_HOME": str(Path(temporary) / "state")}
+            ):
+                paths = RepoPaths.for_root(root)
             session = begin_run(paths, "hermes")
 
             record_session_event(paths, "hermes", "session_start")

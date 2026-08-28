@@ -42,7 +42,8 @@ def make_checkout(root: Path, runtimes: tuple[str, ...] = ("claude",)) -> RepoPa
         (directory / "runtime.yml").write_text(
             f"name: {runtime}\nadapter: generic\nnetwork:\n  mode: isolated\n"
         )
-    return RepoPaths.for_root(root)
+    with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
+        return RepoPaths.for_root(root)
 
 
 class StatePodman(PodmanClient):
@@ -248,7 +249,7 @@ class StopCommandTests(unittest.TestCase):
 
         service.stop_runtime("claude")
 
-        destination = self.paths.session_artifact(
+        destination = self.paths.state_artifact(
             "claude", "cleanup-report.json"
         )
         payload = json.loads(destination.read_text(encoding="utf-8"))

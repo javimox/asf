@@ -8,6 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+export XDG_STATE_HOME="$TMP/state"
 cp -a "$ROOT/." "$TMP/asf"
 mkdir -p "$TMP/bin"
 
@@ -304,7 +305,13 @@ if grep -q 'Egress policy verified.*(allow,' <<< "$broken"; then
 fi
 grep -q 'devcontainer up' "$MOCK_LOG" \
     || { echo "agent container did not start after the advisory degradation" >&2; exit 1; }
-runs="$TMP/asf/.devcontainer/sessions/claude/runs"
+runs=$(cd "$TMP/asf" && python3 - <<'PY_RUNS'
+from asf.paths import RepoPaths
+from asf.runs import runs_root
+
+print(runs_root(RepoPaths.for_root("."), "claude"))
+PY_RUNS
+)
 report="$runs/$(cat "$runs/current")/verification-report.json"
 [[ -f "$report" ]] \
     || { echo "verification report was not persisted to the session directory" >&2; exit 1; }
