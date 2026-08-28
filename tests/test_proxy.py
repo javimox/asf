@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 from asf.errors import ConfigurationError, ValidationError
 from asf.manifest import load_model
@@ -77,7 +79,10 @@ class ProxyTestBase(unittest.TestCase):
             (ROOT / "agents" / "claude" / "runtime.yml").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-        self.paths = RepoPaths.for_root(self.root)
+        with mock.patch.dict(
+            os.environ, {"XDG_STATE_HOME": str(Path(self.tempdir.name) / "state")}
+        ):
+            self.paths = RepoPaths.for_root(self.root)
         begin_run(self.paths, "claude")
 
     def tearDown(self) -> None:

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from asf.runs import (
     begin_run,
     current_run,
     run_artifact,
+    runs_root,
     read_run_policy,
     write_run_policy,
 )
@@ -25,7 +28,8 @@ def make_paths(root: Path) -> RepoPaths:
     (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     (root / "agents").mkdir()
     (root / ".devcontainer").mkdir()
-    return RepoPaths.for_root(root)
+    with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
+        return RepoPaths.for_root(root)
 
 
 class RunTests(unittest.TestCase):
@@ -50,10 +54,25 @@ class RunTests(unittest.TestCase):
             self.assertTrue(second_events.is_file())
             self.assertEqual(first.directory.stat().st_mode & 0o777, 0o700)
             self.assertEqual(second.directory.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(first.directory.parent, runs_root(paths, "hermes"))
+            with self.assertRaises(ValueError):
+                first.directory.relative_to(paths.root)
             self.assertEqual(
                 current_run(paths, "hermes").session_id,
                 second.session_id,
             )
+
+    def test_checkout_local_legacy_runs_are_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "asf"
+            root.mkdir()
+            paths = make_paths(root)
+            session_id = "20260827T220000Z-0badcafe"
+            legacy = paths.session_artifact("hermes", "runs")
+            (legacy / session_id).mkdir(parents=True)
+            (legacy / "current").write_text(session_id + "\n", encoding="utf-8")
+
+            self.assertIsNone(current_run(paths, "hermes"))
 
     def test_policy_snapshot_is_private_and_round_trips(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

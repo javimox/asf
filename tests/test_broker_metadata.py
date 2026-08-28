@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from asf.broker_metadata import (
     prepare_broker_prompt_log,
@@ -19,7 +21,8 @@ def make_paths(root: Path) -> RepoPaths:
     (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     (root / "agents").mkdir()
     (root / ".devcontainer").mkdir()
-    return RepoPaths.for_root(root)
+    with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
+        return RepoPaths.for_root(root)
 
 
 class BrokerMetadataTests(unittest.TestCase):

@@ -75,7 +75,7 @@ security-test pass.
 Caddy records the `CONNECT host:443` decision; tunneled HTTPS content remains
 encrypted. Plain-HTTP request metadata is visible. The active file is shown by
 `proxy logs`; after teardown the raw files stay under
-`.devcontainer/sessions/<agent>/runs/<session-id>/caddy/` next to
+`${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/<session-id>/caddy/` next to
 `egress-summary.json`. Logs rotate at 10 MiB, two backups are kept per session,
 ASF retains the latest 12 runs, and `egress-history.json` keeps compact
 summaries for the latest 100 completed sessions.
@@ -192,8 +192,8 @@ For a running session, use the built-in commands:
 ./sandbox.sh test <agent>
 ```
 Each session also persists its evidence records under
-`.devcontainer/sessions/<agent>/runs/<session-id>/`: `policy.json`,
+`${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/<session-id>/`: `policy.json`,
 `events.jsonl`, `verification-report.json`, `cleanup-report.json`, and for
-proxy mode the Caddy logs and `egress-summary.json`. `runtime-plan.json` and
-`egress-history.json` stay at the session level. See
+proxy mode the Caddy logs and `egress-summary.json`. `egress-history.json` stays
+at the host-state session level; `runtime-plan.json` stays in the checkout. See
 [OBSERVABILITY.md](OBSERVABILITY.md).

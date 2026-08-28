@@ -4,7 +4,7 @@ Each ``open`` mints a single session identifier and a matching directory:
 
 .. code-block:: text
 
-    .devcontainer/sessions/<agent>/runs/<session-id>/
+    ${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/<session-id>/
       policy.json               frozen isolation/network/capability policy
       events.jsonl              host-written lifecycle events
       verification-report.json  startup verification verdicts
@@ -84,8 +84,16 @@ class RunPolicy:
     routed_rules: tuple[RoutedRule, ...]
 
 
+def _run_path(
+    paths: RepoPaths,
+    runtime: str,
+    *parts: str | os.PathLike[str],
+) -> Path:
+    return paths.state_artifact(runtime, _ROOT, *parts)
+
+
 def runs_root(paths: RepoPaths, runtime: str) -> Path:
-    return paths.session_artifact(runtime, _ROOT)
+    return _run_path(paths, runtime)
 
 
 def begin_run(paths: RepoPaths, runtime: str) -> SessionRun:
@@ -97,10 +105,10 @@ def begin_run(paths: RepoPaths, runtime: str) -> SessionRun:
     root.mkdir(parents=True, mode=0o700, exist_ok=True)
     os.chmod(root, 0o700)
 
-    directory = paths.session_artifact(runtime, _ROOT, session_id)
+    directory = _run_path(paths, runtime, session_id)
     directory.mkdir(mode=0o700, exist_ok=False)
 
-    current = paths.session_artifact(runtime, _ROOT, _CURRENT)
+    current = _run_path(paths, runtime, _CURRENT)
     write_text_atomic(current, session_id + "\n")
     os.chmod(current, 0o600)
     prune_runs(paths, runtime)
@@ -110,14 +118,14 @@ def begin_run(paths: RepoPaths, runtime: str) -> SessionRun:
 def current_run(paths: RepoPaths, runtime: str) -> SessionRun | None:
     """Return the selected run directory for one runtime, if any."""
 
-    current = paths.session_artifact(runtime, _ROOT, _CURRENT)
+    current = _run_path(paths, runtime, _CURRENT)
     try:
         session_id = current.read_text(encoding="utf-8").strip()
     except OSError:
         return None
     if not _SESSION_RE.fullmatch(session_id):
         return None
-    directory = paths.session_artifact(runtime, _ROOT, session_id)
+    directory = _run_path(paths, runtime, session_id)
     if not directory.is_dir() or directory.is_symlink():
         return None
     return SessionRun(runtime, session_id, directory)
@@ -129,7 +137,7 @@ def run_artifact(paths: RepoPaths, runtime: str, name: str) -> Path:
     run = current_run(paths, runtime)
     if run is None:
         raise FileNotFoundError(f"no session run for {runtime}")
-    return paths.session_artifact(runtime, _ROOT, run.session_id, name)
+    return _run_path(paths, runtime, run.session_id, name)
 
 
 def prune_runs(

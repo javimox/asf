@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,7 +37,10 @@ class EgressEvidenceTests(unittest.TestCase):
             (ROOT / "agents" / "claude" / "runtime.yml").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-        self.paths = RepoPaths.for_root(self.root)
+        with mock.patch.dict(
+            os.environ, {"XDG_STATE_HOME": str(Path(self.temporary.name) / "state")}
+        ):
+            self.paths = RepoPaths.for_root(self.root)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -185,8 +189,15 @@ class EgressEvidenceTests(unittest.TestCase):
         self.assertNotIn("consider removing", result.stdout)
         self.assertNotIn("consider adding", result.stdout)
 
+    def test_checkout_local_legacy_history_is_ignored(self) -> None:
+        legacy = self.paths.session_artifact("claude", "egress-history.json")
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("{}\n", encoding="utf-8")
+
+        self.assertEqual(load_evidence_history(self.paths, "claude"), ())
+
     def test_malformed_history_fails_closed(self) -> None:
-        history = self.paths.session_artifact("claude", "egress-history.json")
+        history = self.paths.state_artifact("claude", "egress-history.json")
         history.parent.mkdir(parents=True)
         history.write_text("{}\n", encoding="utf-8")
         with self.assertRaises(EgressEvidenceError):

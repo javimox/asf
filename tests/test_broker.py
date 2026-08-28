@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 from asf.broker import (
     BROKER_PORT,
@@ -134,7 +136,10 @@ class BrokerTestBase(unittest.TestCase):
         (self.root / "tools" / "litellm_observer.py").write_text(
             "proxy_handler_instance = object()\n", encoding="utf-8"
         )
-        self.paths = RepoPaths.for_root(self.root)
+        with mock.patch.dict(
+            os.environ, {"XDG_STATE_HOME": str(Path(self.tempdir.name) / "state")}
+        ):
+            self.paths = RepoPaths.for_root(self.root)
         self.manifest = load_model(self.paths.identity.runtime_manifest("claude"))
 
     def tearDown(self) -> None:

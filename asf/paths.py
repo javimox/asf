@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Final
 
 from .errors import ValidationError
-from .identity import ResourceIdentity
+from .identity import ResourceIdentity, validate_runtime_name
 
 __all__ = [
     "PathEscapeError",
@@ -49,6 +49,7 @@ class RepoPaths:
 
     root: Path
     _identity: ResourceIdentity = field(init=False, repr=False, compare=False)
+    _state_home: Path = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         try:
@@ -74,6 +75,15 @@ class RepoPaths:
             "_identity",
             ResourceIdentity.from_physical_path(physical),
         )
+        object.__setattr__(self, "_state_home", _resolve_state_home())
+        try:
+            self.state_dir.relative_to(self.root)
+        except ValueError:
+            pass
+        else:
+            raise RepositoryPathError(
+                f"ASF state directory must be outside the repository: {self.state_dir}"
+            )
 
     @classmethod
     def discover(
@@ -178,6 +188,12 @@ class RepoPaths:
         return self.devcontainer_dir / "sessions"
 
     @property
+    def state_dir(self) -> Path:
+        """Checkout-scoped host state that is never placed inside the checkout."""
+
+        return _safe_child(self._state_home, ("asf", self.identity.prefix))
+
+    @property
     def devcontainer_base(self) -> Path:
         return self.devcontainer_dir / "devcontainer.base.json"
 
@@ -203,6 +219,17 @@ class RepoPaths:
 
         return _safe_child(self.root, parts)
 
+    def state_artifact(
+        self,
+        runtime: str,
+        *parts: str | os.PathLike[str],
+    ) -> Path:
+        """Return a safe host-only state path for one runtime."""
+
+        runtime = validate_runtime_name(runtime)
+        session = _safe_child(self.state_dir, ("sessions", runtime))
+        return _safe_child(session, parts)
+
     def session_artifact(
         self,
         runtime: str,
@@ -219,6 +246,17 @@ class RepoPaths:
         relative_session = lexical_session.relative_to(self.root)
         physical_session = _safe_child(self.root, relative_session.parts)
         return _safe_child(physical_session, parts)
+
+
+def _resolve_state_home() -> Path:
+    """Return the XDG state home, falling back to ``~/.local/state``."""
+
+    configured = os.environ.get("XDG_STATE_HOME")
+    if configured:
+        candidate = Path(configured)
+        if candidate.is_absolute():
+            return candidate
+    return Path.home() / ".local" / "state"
 
 
 def _looks_like_repository(candidate: Path) -> bool:

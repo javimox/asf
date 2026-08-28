@@ -100,7 +100,10 @@ class CaptureCommandTests(unittest.TestCase):
         runtime = root / "agents" / "routed-scanner"
         runtime.mkdir(parents=True)
         (runtime / "runtime.yml").write_text("name: routed-scanner\n", encoding="utf-8")
-        self.paths = RepoPaths.for_root(root)
+        with patch.dict(
+            os.environ, {"XDG_STATE_HOME": str(Path(self.temporary.name) / "state")}
+        ):
+            self.paths = RepoPaths.for_root(root)
         self.observation = begin_run(self.paths, "routed-scanner")
 
     def tearDown(self) -> None:
@@ -153,6 +156,8 @@ class CaptureCommandTests(unittest.TestCase):
         captures = tuple(self.observation.directory.glob("network-*.pcap"))
         self.assertEqual(len(captures), 1)
         self.assertEqual(os.stat(captures[0]).st_mode & 0o777, 0o600)
+        with self.assertRaises(ValueError):
+            captures[0].relative_to(self.paths.root)
         self.assertIn(captures[0].name, result.stdout)
         args = start.call_args.args
         self.assertEqual(args[0], "routed-scanner")

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -227,6 +228,75 @@ class SafeChildTests(unittest.TestCase):
             with self.subTest(cls=cls):
                 self.assertTrue(issubclass(cls, ValidationError))
                 self.assertTrue(issubclass(cls, AsfError))
+
+
+class StateArtifactTests(unittest.TestCase):
+    def test_uses_xdg_state_home_outside_the_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            checkout = make_fake_checkout(base / "checkout")
+            state_home = base / "state"
+            with mock.patch.dict(
+                os.environ, {"XDG_STATE_HOME": str(state_home)}
+            ):
+                paths = RepoPaths.for_root(checkout)
+
+            expected = (
+                state_home
+                / "asf"
+                / paths.identity.prefix
+                / "sessions"
+                / "hermes"
+                / "runs"
+                / "current"
+            )
+            actual = paths.state_artifact("hermes", "runs", "current")
+            self.assertEqual(actual, expected)
+            with self.assertRaises(ValueError):
+                actual.relative_to(paths.root)
+
+    def test_unset_xdg_state_home_falls_back_to_local_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            checkout = make_fake_checkout(base / "checkout")
+            home = base / "home"
+            home.mkdir()
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                os.environ.pop("XDG_STATE_HOME", None)
+                paths = RepoPaths.for_root(checkout)
+
+            self.assertEqual(
+                paths.state_dir,
+                home / ".local" / "state" / "asf" / paths.identity.prefix,
+            )
+
+    def test_state_directory_inside_checkout_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout = make_fake_checkout(Path(temporary) / "checkout")
+            with mock.patch.dict(
+                os.environ, {"XDG_STATE_HOME": str(checkout / ".state")}
+            ):
+                with self.assertRaisesRegex(
+                    RepositoryPathError, "must be outside the repository"
+                ):
+                    RepoPaths.for_root(checkout)
+
+    def test_validates_state_runtime_and_artifact_components(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            checkout = make_fake_checkout(base / "checkout")
+            with mock.patch.dict(
+                os.environ, {"XDG_STATE_HOME": str(base / "state")}
+            ):
+                paths = RepoPaths.for_root(checkout)
+
+            with self.assertRaises(InvalidNameError):
+                paths.state_artifact("../escape", "runs")
+            for parts in ((), ("..",), ("/etc/passwd",), ("",)):
+                with self.subTest(parts=parts), self.assertRaises(
+                    RepositoryPathError
+                ):
+                    paths.state_artifact("hermes", *parts)
 
 
 class SessionArtifactTests(unittest.TestCase):
