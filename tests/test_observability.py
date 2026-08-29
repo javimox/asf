@@ -48,7 +48,7 @@ llm:
   api_key_env: OPENAI_API_KEY
 """
     )
-    with patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
+    with patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state dir")}):
         return RepoPaths.for_root(root)
 
 
@@ -124,7 +124,7 @@ class ObserveTests(unittest.TestCase):
         root = Path(self.temporary.name) / "asf"
         root.mkdir()
         self.environment = patch.dict(
-            os.environ, {"XDG_STATE_HOME": str(Path(self.temporary.name) / "state")}
+            os.environ, {"XDG_STATE_HOME": str(Path(self.temporary.name) / "state dir")}
         )
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -243,6 +243,9 @@ class ObserveTests(unittest.TestCase):
         self.assertIn("captures: 2", result.stdout)
         self.assertIn("network-20260825T221418Z.pcap (2.0 KiB)", result.stdout)
         self.assertIn("tcpdump -nn -r", result.stdout)
+        self.assertIn("'" + str(latest) + "'", result.stdout)
+        self.assertIn("captures may contain application content", result.stdout)
+        self.assertNotIn("LLM responses are not traced", result.stdout)
         self.assertNotIn("recent network activity", result.stdout)
         self.assertNotIn("policy-match=", result.stdout)
 

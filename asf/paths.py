@@ -176,10 +176,6 @@ class RepoPaths:
         return self.root / "tests"
 
     @property
-    def broker_dir(self) -> Path:
-        return self.root / "broker"
-
-    @property
     def devcontainer_dir(self) -> Path:
         return self.root / ".devcontainer"
 

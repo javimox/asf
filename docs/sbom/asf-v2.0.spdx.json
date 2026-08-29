@@ -2,14 +2,14 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "annotations": [
     {
-      "annotationDate": "2026-08-28T22:12:12Z",
+      "annotationDate": "2026-08-26T00:00:00Z",
       "annotationType": "OTHER",
       "annotator": "Tool: tools/generate_sbom.py",
       "comment": "Source/deployment inventory only; container image layers were not scanned."
     }
   ],
   "creationInfo": {
-    "created": "2026-08-28T22:12:12Z",
+    "created": "2026-08-26T00:00:00Z",
     "creators": [
       "Tool: tools/generate_sbom.py"
     ]
@@ -18,7 +18,7 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/2.0/4d41ae62b79aed00",
+  "documentNamespace": "https://asf.invalid/spdx/2.0/c2994b104717aafc",
   "name": "ASF-2.0-source-deployment-inventory",
   "packages": [
     {
@@ -26,10 +26,10 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "4d41ae62b79aed005c886913eaef50f6ee38ff81de64b639558e19dddea51e05"
+          "checksumValue": "c2994b104717aafcc6bd9a2c04f414e208291fa70dd36de0b7eeeb6a0ee863fe"
         }
       ],
-      "comment": "Deterministic source-tree digest over 218 files using sorted SHA-256 file digests and relative paths; excludes generated caches, build outputs, session artifacts, local .claude settings, and the docs/sbom/ directory itself. Regenerate with tools/generate_sbom.py.",
+      "comment": "Deterministic source-tree digest over 221 files using sorted SHA-256 file digests and relative paths. Git checkouts inventory tracked files only; source archives use the archive contents. Generated caches, build outputs, session artifacts, local .claude settings, and docs/sbom/ are excluded. Regenerate with tools/generate_sbom.py.",
       "copyrightText": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -37,7 +37,7 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "4d41ae62b79aed005c886913eaef50f6ee38ff81de64b639558e19dddea51e05"
+        "packageVerificationCodeValue": "c2994b104717aafcc6bd9a2c04f414e208291fa70dd36de0b7eeeb6a0ee863fe"
       },
       "versionInfo": "2.0"
     }

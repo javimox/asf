@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+
+from asf.config import AsfConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_shell_assignments(path: Path) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        result[key] = value.strip('"\'')
-    return result
+    return dict(AsfConfig.load(path).values)
 
 
 class DependencyPinTests(unittest.TestCase):
@@ -59,11 +57,62 @@ class DependencyPinTests(unittest.TestCase):
         for arg in args - supplied_elsewhere:
             self.assertIn(arg, config, f"Dockerfile ARG {arg} has no pin in asf.conf")
 
-    def test_broker_image_uses_exact_release_tag(self) -> None:
-        broker = parse_shell_assignments(ROOT / "asf.conf")
-        image = broker["LITELLM_IMAGE"]
-        self.assertRegex(image, r":v\d+\.\d+\.\d+$")
-        self.assertNotIn("main-stable", image)
+    def test_image_references_keep_exact_tags_with_optional_digests(self) -> None:
+        config = parse_shell_assignments(ROOT / "asf.conf")
+        patterns = {
+            "NODE_IMAGE": r"^node:\d+\.\d+\.\d+-bookworm-slim(?:@sha256:[0-9a-f]{64})?$",
+            "UV_IMAGE": r"^ghcr\.io/astral-sh/uv:\d+\.\d+\.\d+(?:@sha256:[0-9a-f]{64})?$",
+            "LITELLM_IMAGE": r"^ghcr\.io/berriai/litellm:v\d+\.\d+\.\d+(?:@sha256:[0-9a-f]{64})?$",
+        }
+        for key, pattern in patterns.items():
+            with self.subTest(key=key):
+                self.assertRegex(config[key], pattern)
+                self.assertNotIn("main-stable", config[key])
+
+    def test_release_pin_script_preserves_tags_and_adds_digests(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tools = root / "tools"
+            tools.mkdir()
+            script = tools / "pin_digests.sh"
+            script.write_text(
+                (ROOT / "tools" / "pin_digests.sh").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            script.chmod(0o755)
+            references = {
+                "NODE_IMAGE": "node:22.23.1-bookworm-slim",
+                "UV_IMAGE": "ghcr.io/astral-sh/uv:0.11.31",
+                "LITELLM_IMAGE": "ghcr.io/berriai/litellm:v1.93.0",
+            }
+            (root / "asf.conf").write_text(
+                "".join(f"{key}={value}\n" for key, value in references.items()),
+                encoding="utf-8",
+            )
+            engine = root / "fake-podman"
+            digest = "a" * 64
+            engine.write_text(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "  pull) exit 0 ;;\n"
+                f"  image) printf '%s\\n' 'example.invalid/image@sha256:{digest}' ;;\n"
+                "  *) exit 2 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            engine.chmod(0o755)
+            environment = dict(os.environ, ENGINE=str(engine))
+            subprocess.run(
+                ("bash", str(script)),
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            pinned = dict(AsfConfig.load(root / "asf.conf").values)
+            for key, reference in references.items():
+                self.assertEqual(pinned[key], f"{reference}@sha256:{digest}")
 
     def test_shared_agent_image_keeps_routed_tools_minimal(self) -> None:
         dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
@@ -181,9 +230,9 @@ class DependencyPinTests(unittest.TestCase):
         )
 
     def test_network_verifiers_share_one_typed_engine(self) -> None:
-        runtime = (ROOT / "asf" / "runtime.py").read_text(encoding="utf-8")
+        startup = (ROOT / "asf" / "startup_verification.py").read_text(encoding="utf-8")
         security = (ROOT / "asf" / "security_test.py").read_text(encoding="utf-8")
-        self.assertIn("VerificationEngine", runtime)
+        self.assertIn("VerificationEngine", startup)
         self.assertIn("VerificationEngine", security)
         self.assertFalse((ROOT / "lib").exists())
 

@@ -34,6 +34,17 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
         self.assertEqual(package["versionInfo"], "2.0")
         self.assertFalse(package["filesAnalyzed"])
+        citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+        release_date = re.search(
+            r"^date-released:\s*(\d{4}-\d{2}-\d{2})$",
+            citation,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(release_date)
+        self.assertEqual(
+            data["creationInfo"]["created"],
+            f"{release_date.group(1)}T00:00:00Z",
+        )
 
 
 class ConsolidationTests(unittest.TestCase):
@@ -50,6 +61,7 @@ class ConsolidationTests(unittest.TestCase):
             "tools/load_runtime.py",
             "asf/repos.py",
             "asf/locks.py",
+            "tools/render_routed_rules.py",
         ):
             with self.subTest(relative=relative):
                 self.assertFalse((ROOT / relative).exists())

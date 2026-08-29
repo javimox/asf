@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import unittest
 from ipaddress import IPv4Address, IPv4Network
-from pathlib import Path
 
 from asf.models import RoutedRule
 from asf.routed_policy import render_routed_policy
 
-ROOT = Path(__file__).resolve().parents[1]
-MODULE_PATH = ROOT / "tools" / "render_routed_rules.py"
-spec = importlib.util.spec_from_file_location("render_routed_rules", MODULE_PATH)
-assert spec and spec.loader
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+
+def _render(rules: list[dict], source_ip: str, scan_if: str, egress_if: str) -> str:
+    typed = tuple(
+        RoutedRule(
+            IPv4Network(item["cidr"], strict=True),
+            item.get("protocol"),
+            (
+                tuple(item["ports"])
+                if isinstance(item.get("ports"), list)
+                else item.get("ports")
+            ),
+        )
+        for item in rules
+    )
+    return render_routed_policy(typed, IPv4Address(source_ip), scan_if, egress_if)
 
 
-class RoutedRulesTests(unittest.TestCase):
+class RoutedPolicyTests(unittest.TestCase):
     def test_every_rule_binds_interfaces_source_destination_and_protocol(self) -> None:
-        output = module.render(
+        output = _render(
             [
                 {"cidr": "192.168.50.0/24", "protocol": "tcp", "ports": [80, 443]},
                 {"cidr": "192.168.60.1/32", "protocol": "udp", "ports": "any"},
@@ -34,15 +41,17 @@ class RoutedRulesTests(unittest.TestCase):
         self.assertIn("ip daddr 192.168.50.0/24 tcp dport { 80, 443 }", output)
         self.assertIn("ip daddr 192.168.60.1/32 meta l4proto udp ct state", output)
         self.assertIn("ip daddr 192.168.70.1/32 icmp type echo-request", output)
-        any_tcp = module.render(
+        any_tcp = _render(
             [{"cidr": "192.168.80.1/32", "protocol": "tcp", "ports": "any"}],
-            "10.203.10.10", "eth0", "eth1",
+            "10.203.10.10",
+            "eth0",
+            "eth1",
         )
         self.assertIn("ip daddr 192.168.80.1/32 meta l4proto tcp ct state", any_tcp)
         self.assertIn("policy drop", output)
 
     def test_destination_only_rule_has_no_protocol_or_port_match(self) -> None:
-        output = module.render(
+        output = _render(
             [{"cidr": "192.168.80.1/32"}],
             "10.203.10.10",
             "scan0",
@@ -58,7 +67,7 @@ class RoutedRulesTests(unittest.TestCase):
         self.assertIn("ip daddr 192.168.80.1/32 masquerade", output)
 
     def test_nat_is_limited_to_declared_destinations(self) -> None:
-        output = module.render(
+        output = _render(
             [
                 {"cidr": "192.168.50.0/24", "protocol": "tcp", "ports": [443]},
                 {"cidr": "192.168.50.0/24", "protocol": "udp", "ports": [161]},
@@ -68,10 +77,13 @@ class RoutedRulesTests(unittest.TestCase):
             "egress0",
         )
         self.assertEqual(output.count("ip daddr 192.168.50.0/24 masquerade"), 1)
-        self.assertNotIn("masquerade\n", output.replace(
-            "ip saddr 10.203.10.10 ip daddr 192.168.50.0/24 masquerade\n", ""
-        ))
-
+        self.assertNotIn(
+            "masquerade\n",
+            output.replace(
+                "ip saddr 10.203.10.10 ip daddr 192.168.50.0/24 masquerade\n",
+                "",
+            ),
+        )
 
     def test_separate_blocked_probe_is_nat_only(self) -> None:
         output = render_routed_policy(
@@ -127,7 +139,7 @@ class RoutedRulesTests(unittest.TestCase):
         self.assertNotIn("udp dport 4000", output)
 
     def test_reply_rule_is_bound_to_the_runtime_ip(self) -> None:
-        output = module.render(
+        output = _render(
             [{"cidr": "192.168.50.1/32", "protocol": "tcp", "ports": [8080]}],
             "10.203.10.10",
             "scan0",
