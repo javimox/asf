@@ -72,8 +72,11 @@ Dev Container CLI and runs the real lifecycle.
 
 ## SBOM scope
 
-`docs/sbom/asf-v2.0.spdx.json` is a source/deployment inventory generated
-from this checkout. It records ASF, PyYAML, pinned tools, and image references.
+`docs/sbom/asf-v2.0.spdx.json` is a deterministic source/deployment inventory
+generated from this checkout. In Git checkouts it inventories tracked files only,
+so local untracked files do not change the release digest. Its timestamp comes
+from `CITATION.cff`'s release date.
+It records ASF, PyYAML, pinned tools, and image references.
 It is not an image-layer SBOM. Generate image-specific SBOMs on the release host
 after builds, for example with Syft or Podman's available SBOM tooling, and
 archive them with the release artifacts.

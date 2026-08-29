@@ -10,6 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_STATE_HOME=$(mktemp -d)
 trap 'rm -rf "$TEST_STATE_HOME"' EXIT
 export XDG_STATE_HOME="$TEST_STATE_HOME"
+export ASF_TEST_STATE_GUARD="$TEST_STATE_HOME"
 
 bash -n \
     "$ROOT/sandbox.sh" \

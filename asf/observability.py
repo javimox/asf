@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import shlex
 from pathlib import Path
 from typing import Sequence
 
@@ -119,8 +120,9 @@ def run_observe_command(
                 if policy.isolation == "microvm" and policy.network_mode == "routed"
                 else ""
             ),
-            "\n  Host-side snapshot only; guest command execution and LLM responses "
-            "are not traced.\n\n",
+            "\n  Host-side snapshot only; ASF does not reconstruct guest command "
+            "execution or decode packet payloads. Opt-in prompt logs and packet "
+            "captures may contain application content.\n\n",
         ]
     )
     return ObservationResult(stdout="".join(lines))
@@ -204,7 +206,7 @@ def _network_capture_summary(paths: RepoPaths, runtime: str, session) -> str:
         lines.append(
             f"    {label}:   {display} ({_format_size(latest.stat().st_size)})\n"
         )
-        lines.append(f"    inspect:  tcpdump -nn -r {display}\n")
+        lines.append(f"    inspect:  tcpdump -nn -r {shlex.quote(str(display))}\n")
     return "".join(lines)
 
 

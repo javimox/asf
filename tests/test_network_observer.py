@@ -165,6 +165,30 @@ class CaptureCommandTests(unittest.TestCase):
         self.assertEqual(args[2], "gateway:test")
         self.assertEqual(args[4], captures[0])
 
+    @patch.object(NetworkCaptureService, "start", side_effect=NetworkCaptureError("boom"))
+    @patch("asf.network_observer.read_run_policy")
+    @patch("asf.network_observer.SessionDiscovery.from_paths")
+    def test_failed_start_removes_unused_reserved_capture(
+        self, from_paths, read_policy, start
+    ) -> None:
+        from_paths.return_value = self._discovery(self._session())
+        read_policy.return_value = SimpleNamespace(
+            isolation="microvm", network_mode="routed"
+        )
+        podman = Mock()
+        podman.exists.return_value = False
+
+        with self.assertRaisesRegex(NetworkCaptureError, "boom"):
+            run_capture_command(
+                ("capture", "start", "routed-scanner"),
+                self.paths,
+                podman=podman,
+                require_available=False,
+            )
+
+        self.assertEqual(tuple(self.observation.directory.glob("network-*.pcap")), ())
+        start.assert_called_once()
+
     @patch.object(NetworkCaptureService, "start")
     @patch("asf.network_observer.read_run_policy")
     @patch("asf.network_observer.SessionDiscovery.from_paths")

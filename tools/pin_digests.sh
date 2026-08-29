@@ -10,7 +10,7 @@
 # What it does:
 #   1. pulls each KEY=image reference listed in PIN_KEYS below
 #   2. resolves its RepoDigest
-#   3. rewrites asf.conf in place as  KEY=repo@sha256:...   # was: old-ref
+#   3. rewrites asf.conf in place as  KEY=tag@sha256:...   # was: old-ref
 #
 # Run it on the machine that builds the release, then commit the result and
 # regenerate the SBOM (tools/generate_sbom.py). Safe to re-run: an already
@@ -43,19 +43,21 @@ for key in "${PIN_KEYS[@]}"; do
 
     echo "  → resolving $key ($ref)"
     "$ENGINE" pull --quiet "$ref" >/dev/null
-    digest="$("$ENGINE" image inspect --format '{{index .RepoDigests 0}}' "$ref")"
-    if [[ -z "$digest" || "$digest" != *"@sha256:"* ]]; then
+    repo_digest="$("$ENGINE" image inspect --format '{{index .RepoDigests 0}}' "$ref")"
+    if [[ -z "$repo_digest" || "$repo_digest" != *"@sha256:"* ]]; then
         echo "✗ could not resolve a RepoDigest for $ref" >&2
         exit 1
     fi
+    digest="${repo_digest##*@}"
+    pinned="${ref}@${digest}"
 
     tmp="$(mktemp "$CONF.XXXXXX")"
-    awk -v key="$key" -v digest="$digest" -v old="$ref" '
-        index($0, key "=") == 1 { print key "=" digest "   # was: " old; next }
+    awk -v key="$key" -v pinned="$pinned" -v old="$ref" '
+        index($0, key "=") == 1 { print key "=" pinned "   # was: " old; next }
         { print }
     ' "$CONF" > "$tmp"
     mv "$tmp" "$CONF"
-    echo "  ✓ $key -> $digest"
+    echo "  ✓ $key -> $pinned"
     changed=1
 done
 

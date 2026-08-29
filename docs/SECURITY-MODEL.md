@@ -8,9 +8,11 @@ limitations. For the concise trust boundary and threat-model summary, start with
 
 Defense in depth, from outside in:
 
-1. **Container boundary.** The host filesystem is invisible to the agent. Only paths
-   listed in `agents/<name>/repos.yml` are bind-mounted into that runtime, plus
-   its declared named volumes. Repository entries may be `rw` or `ro`.
+1. **Container boundary.** The host filesystem is not generally exposed to the
+   agent. ASF always mounts its own checkout read-only at `/workspace/sandbox`
+   (with `/workspace/sandbox/secrets` shadowed by an empty read-only tmpfs), then
+   adds only repositories listed in `agents/<name>/repos.yml` and declared named
+   volumes. Repository entries may be `rw` or `ro`.
 2. **Rootless engine.** Podman runs as your unprivileged user; there is no root
    daemon. A container escape yields only your existing user privileges.
 3. **Non-root container user, no capabilities.** The container runs as `node`

@@ -37,8 +37,9 @@ up, and exits. It is not a daemon and holds no privileges between runs.
 
 ## If you read only three files
 
-1. **`asf/runtime_plan.py` + `asf/networks.py` + `asf/runtime.py`** — the
-   immutable topology and complete session lifecycle.
+1. **`asf/runtime_plan.py` + `asf/networks.py` + `asf/runtime.py` +
+   `asf/startup_verification.py`** — the immutable topology, startup policy
+   proof, and complete session lifecycle.
 2. **`asf/proxy.py` + `asf/routed.py`** — the two external-access enforcement
    paths: Caddy allowlisting and the routed gateway/nftables boundary.
 3. **`asf.conf`** — every deployment pin, privilege switch, and resource limit.
@@ -79,7 +80,7 @@ capability-less by default.
   denied, and no route or DNS path may bypass the proxy. Failure aborts the
   session. The broader loopback/private/link-local/metadata deny matrix is
   available through `./sandbox.sh test <agent>`. (`StartupVerifier` in
-  `asf/runtime.py`)
+  `asf/startup_verification.py`)
 - **The provider API key leaking to the agent.** With the broker enabled the
   key is mounted as a file into the broker only, never in the agent's
   environment, and the proxy drops the provider's domain from the allowlist so
@@ -147,7 +148,7 @@ out removed all of it.
 
 The proxy container is separately constrained: `--cap-drop=ALL`,
 `no-new-privileges`, read-only root, 128 MB, 64 PIDs. The LiteLLM broker is
-also capability-less and read-only, with a 64 MB tmpfs, 256 PIDs, 768 MB, and
+also capability-less and read-only, with a 64 MB tmpfs, 256 PIDs, 1 GiB, and
 one CPU. Its provider key is sent to Podman through standard input and mounted
 as a temporary secret. Dev Container startup output is streamed through the
 shared redactor before it reaches stdout, stderr, or retained failure

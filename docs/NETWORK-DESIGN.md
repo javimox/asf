@@ -43,7 +43,7 @@ These are not configurable and `asf.conf` cannot switch them off:
 - `--cap-drop=ALL`
 - `--security-opt=no-new-privileges`
 - `net.ipv4.ip_forward=0` and `net.ipv6.conf.all.forwarding=0` in every runtime
-- no Podman socket, no host mounts beyond declared ones
+- no Podman socket; no host mounts beyond the mandatory read-only ASF checkout and explicitly declared repositories
 
 ## 2. The three modes
 

@@ -23,14 +23,29 @@ class AsfConfigTests(unittest.TestCase):
     def test_current_configuration_is_parsed_without_execution(self) -> None:
         config = AsfConfig.load(ROOT / "asf.conf")
         self.assertTrue(config.broker_enabled)
-        self.assertEqual(config.broker_image, "ghcr.io/berriai/litellm:v1.93.0")
+        self.assertEqual(config.broker_image, config.values["LITELLM_IMAGE"])
         self.assertEqual(config.broker_startup_timeout, 60)
         self.assertTrue(config.caddy_access_logs)
         self.assertEqual(
             config.build_arguments()[0],
-            "NODE_IMAGE=node:22.23.1-bookworm-slim",
+            f"NODE_IMAGE={config.values['NODE_IMAGE']}",
         )
         self.assertEqual(len(config.build_arguments()), 10)
+
+    def test_digest_pinned_image_references_are_plain_configuration_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            text = (ROOT / "asf.conf").read_text(encoding="utf-8")
+            digest = "a" * 64
+            text = text.replace(
+                "NODE_IMAGE=node:22.23.1-bookworm-slim",
+                f"NODE_IMAGE=node:22.23.1-bookworm-slim@sha256:{digest}",
+            ).replace(
+                "LITELLM_IMAGE=ghcr.io/berriai/litellm:v1.93.0",
+                f"LITELLM_IMAGE=ghcr.io/berriai/litellm:v1.93.0@sha256:{digest}",
+            )
+            config = AsfConfig.load(self.write_config(Path(temporary), text))
+            self.assertTrue(config.broker_image.endswith(f"@sha256:{digest}"))
+            self.assertTrue(config.build_arguments()[0].endswith(f"@sha256:{digest}"))
 
     def test_comments_quotes_and_last_assignment_win(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

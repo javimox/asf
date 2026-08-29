@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "accepted pre-Phase-5 tools/render_routed_rules.py",
+  "source": "accepted pre-Phase-5 routed-policy output",
   "vectors": [
     {
       "name": "single-tcp",

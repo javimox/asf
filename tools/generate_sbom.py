@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Regenerate the ASF source/deployment SPDX inventory deterministically.
 
-The previous SBOM was produced by a one-off pre-release inventory generator
-that did not live in the repository, so the document went stale the moment
-the tree changed. This tool makes the SBOM reproducible: anyone can rerun it
-and compare digests.
+The package digest is a SHA-256 over the sorted list of
+``<relative-path>\n<sha256(file)>\n`` entries for tracked source files. In a
+Git checkout the inventory comes from ``git ls-files`` so local untracked files
+cannot change the release SBOM. Source archives fall back to walking the archive
+contents with the same generated-file exclusions.
 
-The package digest is a deterministic SHA-256 over the sorted list of
-``<relative-path>\\n<sha256(file)>\\n`` entries for every tracked source file,
-excluding generated caches, build outputs, session artifacts, local editor
-settings, and the SBOM file itself. ``created`` is derived from the newest
-file mtime so an unchanged tree yields a byte-identical document.
+The SPDX ``created`` timestamp comes from the release date in ``CITATION.cff``.
+An unchanged tree therefore produces a byte-identical document across checkouts.
 
 Usage:  python3 tools/generate_sbom.py [--check]
   --check   verify the committed SBOM matches the tree (exit 1 on drift)
@@ -21,8 +19,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
+import subprocess
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,10 +34,12 @@ _EXCLUDED_DIRS = {
     "build",
     "dist",
     "persistent",
-    "sessions",  # .devcontainer/sessions
 }
 _EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".pyd"}
 _EXCLUDED_NAMES = {".DS_Store", ".firewall-hash", ".current-agent"}
+_RELEASE_DATE_RE = re.compile(
+    r"^date-released:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE
+)
 
 
 def _version() -> str:
@@ -54,6 +55,8 @@ def _excluded(path: Path) -> bool:
         return True
     if parts[:2] == ("docs", "sbom"):
         return True
+    if parts[:2] == (".devcontainer", "sessions"):
+        return True
     if path.name in _EXCLUDED_NAMES or path.suffix in _EXCLUDED_SUFFIXES:
         return True
     if parts[0] == "secrets" and path.suffix == ".env":
@@ -67,26 +70,81 @@ def _excluded(path: Path) -> bool:
     return False
 
 
-def _inventory() -> tuple[list[Path], str, float]:
-    files = sorted(
+def _git_tracked_files() -> list[Path] | None:
+    try:
+        top = subprocess.run(
+            ("git", "-C", str(ROOT), "rev-parse", "--show-toplevel"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            text=True,
+        )
+    except OSError:
+        return None
+    if top.returncode != 0:
+        return None
+    try:
+        git_root = Path(top.stdout.strip()).resolve(strict=True)
+    except OSError:
+        return None
+    if git_root != ROOT.resolve():
+        return None
+
+    result = subprocess.run(
+        ("git", "-C", str(ROOT), "ls-files", "-z", "--cached"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+
+    files: list[Path] = []
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            relative = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("git returned a non-UTF-8 tracked path") from exc
+        path = ROOT / relative
+        if path.is_file() and not path.is_symlink() and not _excluded(path):
+            files.append(path)
+    return sorted(files)
+
+
+def _inventory_files() -> list[Path]:
+    tracked = _git_tracked_files()
+    if tracked is not None:
+        return tracked
+    return sorted(
         path
         for path in ROOT.rglob("*")
         if path.is_file() and not path.is_symlink() and not _excluded(path)
     )
+
+
+def _inventory() -> tuple[list[Path], str]:
+    files = _inventory_files()
     digest = hashlib.sha256()
-    newest = 0.0
     for path in files:
-        newest = max(newest, path.stat().st_mtime)
         digest.update(str(path.relative_to(ROOT)).encode("utf-8"))
         digest.update(b"\n")
         digest.update(hashlib.sha256(path.read_bytes()).hexdigest().encode())
         digest.update(b"\n")
-    return files, digest.hexdigest(), newest
+    return files, digest.hexdigest()
 
 
-def _document(file_count: int, tree_digest: str, newest_mtime: float) -> dict:
+def _created_timestamp() -> str:
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    match = _RELEASE_DATE_RE.search(citation)
+    if match is None:
+        raise RuntimeError("CITATION.cff must contain date-released: YYYY-MM-DD")
+    return f"{match.group(1)}T00:00:00Z"
+
+
+def _document(file_count: int, tree_digest: str, created: str) -> dict:
     version = _version()
-    created = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest_mtime))
     return {
         "SPDXID": "SPDXRef-DOCUMENT",
         "annotations": [
@@ -119,9 +177,10 @@ def _document(file_count: int, tree_digest: str, newest_mtime: float) -> dict:
                 "comment": (
                     f"Deterministic source-tree digest over {file_count} "
                     "files using sorted SHA-256 file digests and relative "
-                    "paths; excludes generated caches, build outputs, "
-                    "session artifacts, local .claude settings, and the "
-                    "docs/sbom/ directory itself. Regenerate with "
+                    "paths. Git checkouts inventory tracked files only; "
+                    "source archives use the archive contents. Generated "
+                    "caches, build outputs, session artifacts, local .claude "
+                    "settings, and docs/sbom/ are excluded. Regenerate with "
                     "tools/generate_sbom.py."
                 ),
                 "copyrightText": "NOASSERTION",
@@ -149,8 +208,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
 
-    files, tree_digest, newest = _inventory()
-    document = _document(len(files), tree_digest, newest)
+    files, tree_digest = _inventory()
+    document = _document(len(files), tree_digest, _created_timestamp())
     destination = SBOM_DIR / f"asf-v{_version()}.spdx.json"
     payload = json.dumps(document, indent=2, sort_keys=True) + "\n"
 
@@ -158,13 +217,16 @@ def main(argv: list[str] | None = None) -> int:
         if not destination.exists():
             print(f"✗ {destination.relative_to(ROOT)} does not exist")
             return 1
-        existing = json.loads(destination.read_text(encoding="utf-8"))
-        recorded = existing["packages"][0]["checksums"][0]["checksumValue"]
-        if recorded != tree_digest:
-            print(
-                "✗ SBOM is stale: recorded digest "
-                f"{recorded[:16]}… != tree digest {tree_digest[:16]}…"
-            )
+        if destination.read_text(encoding="utf-8") != payload:
+            existing = json.loads(destination.read_text(encoding="utf-8"))
+            recorded = existing["packages"][0]["checksums"][0]["checksumValue"]
+            if recorded != tree_digest:
+                print(
+                    "✗ SBOM is stale: recorded digest "
+                    f"{recorded[:16]}… != tree digest {tree_digest[:16]}…"
+                )
+            else:
+                print("✗ SBOM metadata is stale; regenerate with tools/generate_sbom.py")
             return 1
         print(f"✓ SBOM matches the tree ({len(files)} files)")
         return 0

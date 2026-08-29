@@ -124,7 +124,6 @@ class LayoutTests(unittest.TestCase):
             "secrets_dir": root / "secrets",
             "tools_dir": root / "tools",
             "tests_dir": root / "tests",
-            "broker_dir": root / "broker",
             "devcontainer_dir": root / ".devcontainer",
             "sessions_dir": root / ".devcontainer" / "sessions",
             "devcontainer_base": (
