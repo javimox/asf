@@ -42,6 +42,7 @@ Pins below come from `asf.conf` and security-sensitive Python constants.
 | uv image | `ghcr.io/astral-sh/uv:0.11.31` |
 | Semgrep | `1.171.0` |
 | Claude Code | `2.1.216` |
+| OpenAI Codex CLI | `0.151.0` |
 | Hermes Agent | commit `f9eca7e15f1c2bfe5194aae5aa489af53c0a1a23` |
 | git-delta | `0.18.2` |
 | fzf | `0.74.1` plus architecture-specific SHA-256 checksums |

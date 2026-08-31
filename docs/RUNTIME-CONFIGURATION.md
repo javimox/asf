@@ -6,10 +6,11 @@ manifests, generic Python applications, and concurrent sessions.
 
 ## What persists between sessions
 
-Agent's state lives in a named Podman volume (eg claude: `<checkout>-<path-hash>-claude-config` → `/home/node/.claude/`).
-It survives `./sandbox.sh open <agent>` and rebuilds — only `./sandbox.sh reset <agent>` (or
-`podman volume rm`) removes it. The container itself is removed on exit; only the
-volumes persist.
+Agent state declared in `filesystem.state` lives in named Podman volumes. For
+example, Claude persists `/home/node/.claude/` and Codex persists
+`/home/node/.codex/`. State survives `./sandbox.sh open <agent>` and image
+rebuilds; `./sandbox.sh reset <agent>` (or explicit volume removal) clears it.
+The container itself is removed on exit.
 
 | Persisted | Where |
 |-----------|-------|
@@ -48,10 +49,16 @@ project context in each repo's own `CLAUDE.md`, which the sandbox never touches.
 
 ## Secrets (host-side files are not exposed to the container)
 
-API keys and tokens live on the **host**, never inside the container image or
-volumes. At container start `sandbox.sh` injects them into the container's
-process environment only — never written to `~/.hermes/.env` inside the
-container, never baked into the image, never stored in `devcontainer.json`.
+ASF-managed provider API keys live on the **host**, never inside the container
+image or persistent agent volumes. When a runtime deliberately uses its own
+native interactive login, that client may persist its session credentials in
+its declared state volume instead. Codex is one such case: ChatGPT login state
+is runtime-visible under `/home/node/.codex` by design and should be treated as
+a sensitive persistent credential.
+
+At container start, secrets declared through ASF are injected only where the
+selected authentication path requires them; they are never baked into the image
+or stored in generated `devcontainer.json`.
 
 The ASF project root is mounted read-only at `/workspace/sandbox` so the live
 policy files are available at startup. To prevent that broad mount from exposing
@@ -63,7 +70,7 @@ check fails. This mask remains enabled even when optional hardening is disabled.
 
 ```
 secrets/
-  common.env      # shared by all agents      (gitignored)
+  common.env      # shared where declared     (gitignored)
   claude.env      # claude only               (gitignored)
   hermes.env      # hermes only               (gitignored)
   *.example       # tracked templates
@@ -194,6 +201,17 @@ in `secrets/claude.env`. To authenticate interactively with Claude Code's
 directly with Anthropic. Caddy Proxy remains enabled and continues to enforce the declared
 domain allowlist; disabling the LLM broker does not disable egress filtering.
 
+The supplied Codex runtime is intentionally subscription-login first.
+`agents/codex/runtime.yml` sets `llm.broker: false` and allows only
+`auth.openai.com` plus `chatgpt.com` through Caddy. It declares no host secret
+environment files: native ChatGPT login does not need an API key, and the
+supplied least-privilege profile therefore does not expose unrelated
+`common.env` credentials to Codex. Use `codex login --device-auth` inside the
+sandbox; the resulting Codex state lives under `/home/node/.codex` and persists
+until `./sandbox.sh reset codex`. ASF does not rewrite Codex model/config state
+on startup. Codex's own `/model` selection is persisted by Codex in that state.
+API-key/broker operation is not part of this supplied profile.
+
 Hermes uses its existing `openai-api` configuration. When the broker is active,
 ASF sets `OPENAI_BASE_URL` to LiteLLM's OpenAI-compatible `/v1` endpoint and
 replaces `OPENAI_API_KEY` with the temporary session token. The reusable OpenAI
@@ -235,7 +253,7 @@ disable it again after diagnosis.
 
 Most ASF policy options are **agent-agnostic**. The adapter chooses what is
 installed/configured; it does not lock the runtime to one network or isolation
-mode. Hermes, Claude, and generic Python workloads can use the same ASF policy
+mode. Hermes, Claude, Codex, and generic Python workloads can use the same ASF policy
 knobs when the combination is supported.
 
 | Setting | Options / constraint |

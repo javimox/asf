@@ -12,7 +12,7 @@ rather than audit the tree.
 
 ## What ASF is
 
-ASF runs an AI agent (Claude Code, Hermes, or any containerised workload)
+ASF runs an AI agent (Claude Code, Codex, Hermes, or any containerised workload)
 inside a locked-down Podman container. You keep a shell; the agent works in the
 box. The controller is **`sandbox.sh`** — a command-line tool that runs, sets
 up, and exits. It is not a daemon and holds no privileges between runs.
@@ -86,8 +86,11 @@ capability-less by default.
   environment, and the proxy drops the provider's domain from the allowlist so
   a key found elsewhere still cannot be used directly. (`asf/broker.py`)
 - **Host secret files leaking in.** `secrets/` is masked inside the container
-  by an empty read-only tmpfs; startup aborts if the mask is missing. Values
-  are injected at run time, never baked into an image or volume.
+  by an empty read-only tmpfs; startup aborts if the mask is missing. ASF-managed
+  provider secrets are never baked into an image or persistent agent volume.
+  Native interactive-login clients are different: when explicitly configured,
+  their own runtime-visible session credentials may persist in a declared state
+  volume (for example Codex under `/home/node/.codex`).
   (`asf/runtime.py`, `asf/devcontainer.py`, `.devcontainer/on-start.sh`)
 - **The container acting as root on your host.** Unprivileged user
   (`--user=1000:1000`), every capability dropped, `no-new-privileges` set.

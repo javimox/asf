@@ -25,6 +25,7 @@ class DependencyPinTests(unittest.TestCase):
             "UV_IMAGE",
             "SEMGREP_VERSION",
             "CLAUDE_CODE_VERSION",
+            "CODEX_CLI_VERSION",
             "HERMES_AGENT_COMMIT",
             "GIT_DELTA_VERSION",
             "FZF_VERSION",
@@ -46,6 +47,7 @@ class DependencyPinTests(unittest.TestCase):
         self.assertRegex(dependencies["HERMES_AGENT_COMMIT"], r"^[0-9a-f]{40}$")
         self.assertRegex(dependencies["FZF_SHA256_AMD64"], r"^[0-9a-f]{64}$")
         self.assertRegex(dependencies["FZF_SHA256_ARM64"], r"^[0-9a-f]{64}$")
+        self.assertRegex(dependencies["CODEX_CLI_VERSION"], r"^\d+\.\d+\.\d+$")
         self.assertRegex(dependencies["TIRITH_VERSION"], r"^\d+\.\d+\.\d+$")
         self.assertRegex(dependencies["TIRITH_SHA256_AMD64"], r"^[0-9a-f]{64}$")
         self.assertRegex(dependencies["TIRITH_SHA256_ARM64"], r"^[0-9a-f]{64}$")
@@ -150,6 +152,25 @@ class DependencyPinTests(unittest.TestCase):
         self.assertIn('exit 1', setup)
         self.assertIn('cfg["tirith_fail_open"]', compat)
         self.assertIn('"action": "block"', compat)
+
+    def test_codex_is_pinned_and_uses_native_chatgpt_login_path(self) -> None:
+        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
+        manifest = (ROOT / "agents" / "codex" / "runtime.yml").read_text(encoding="utf-8")
+        setup = (ROOT / "agents" / "codex" / "setup.sh").read_text(encoding="utf-8")
+
+        self.assertIn('@openai/codex@${CODEX_CLI_VERSION}', dockerfile)
+        self.assertIn('adapter: codex', manifest)
+        self.assertIn('broker: false', manifest)
+        self.assertIn('target: /home/node/.codex', manifest)
+        self.assertIn('CODEX_HOME: /home/node/.codex', manifest)
+        self.assertIn('verify_domain: chatgpt.com', manifest)
+        self.assertIn('- chatgpt.com', manifest)
+        self.assertIn('- auth.openai.com', manifest)
+        self.assertNotIn('api.openai.com', manifest)
+        self.assertNotIn('secrets:', manifest)
+        self.assertFalse((ROOT / "secrets" / "codex.env.example").exists())
+        self.assertIn('codex login --device-auth', setup)
+        self.assertIn('codex login status', setup)
 
     def test_shared_agent_image_keeps_routed_tools_minimal(self) -> None:
         dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(

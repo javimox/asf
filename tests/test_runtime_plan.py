@@ -122,6 +122,19 @@ class RuntimePlanTests(unittest.TestCase):
             [item.kind for item in plan.ephemeral_resources],
         )
 
+    def test_codex_manifest_disables_broker_when_global_broker_is_enabled(self) -> None:
+        plan = self.plan("codex", broker=True)
+        self.assertFalse(plan.broker_enabled)
+        self.assertEqual(
+            [network.role for network in plan.networks],
+            [NetworkRole.INTERNAL, NetworkRole.EGRESS],
+        )
+        self.assertEqual(
+            [container.role for container in plan.support_containers],
+            [SessionRole.PROXY],
+        )
+        self.assertIsNone(plan.container(SessionRole.BROKER))
+
     def test_routed_topology_uses_the_explicit_allocation(self) -> None:
         manifest = load_model(ROOT / "agents" / "routed-scanner" / "example-runtime-ci-tested.yml")
         plan = build_runtime_plan(
@@ -264,6 +277,7 @@ class RuntimePlanTests(unittest.TestCase):
             runtime: runtime_plan_path(self.paths, runtime).exists()
             for runtime in (
                 "claude",
+                "codex",
                 "crewai",
                 "hermes",
                 "isolated-worker",
@@ -508,7 +522,7 @@ class RuntimePlanWriteTests(unittest.TestCase):
         manifests = sorted((ROOT / "agents").glob("*/runtime.yml"))
         # Tripwire: adding or removing a shipped runtime must be a
         # deliberate act — update this count together with the change.
-        self.assertEqual(len(manifests), 8)
+        self.assertEqual(len(manifests), 9)
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             for manifest_path in manifests:

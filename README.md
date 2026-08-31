@@ -91,6 +91,7 @@ agent should not modify.
 ASF currently includes runtime support for:
 
 - **Claude Code**
+- **OpenAI Codex CLI**
 - **Hermes**
 - **Generic Python agent applications**, including applications built with
   LangGraph, CrewAI, smolagents, or custom frameworks
