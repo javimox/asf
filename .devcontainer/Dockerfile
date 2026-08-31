@@ -12,6 +12,13 @@ ENV TZ="$TZ"
 ARG CLAUDE_CODE_VERSION=2.1.216
 ARG SEMGREP_VERSION=1.171.0
 ARG HERMES_AGENT_COMMIT=f9eca7e15f1c2bfe5194aae5aa489af53c0a1a23
+# Tirith — Hermes's pre-execution command scanner. Installed at BUILD time,
+# pinned and checksum-verified, so the sandbox never needs runtime egress to
+# GitHub release hosts just to bootstrap its own security tooling. Hermes's
+# auto-installer is skipped because Hermes is configured with its absolute path.
+ARG TIRITH_VERSION=0.4.0
+ARG TIRITH_SHA256_AMD64=ec90836eef3519829f0b8371836a09c12c31fd8620d411a38b69423b19b5e468
+ARG TIRITH_SHA256_ARM64=8d421d04079ad88caf660dc021bc2e8447142c2d308a4998595ba24a4d2c23c6
 
 # System tools. netcat-openbsd provides `nc -X connect`, used to carry SSH
 # over the egress proxy (ssh.github.com:443).
@@ -141,6 +148,9 @@ RUN zsh -f -c ' \
 COPY --chown=node:node \
     agents/hermes/patches/gpt-5.6-reasoning-none.patch \
     /tmp/hermes-gpt-5.6-reasoning-none.patch
+COPY --chown=node:node \
+    agents/hermes/patches/tirith-fail-closed.patch \
+    /tmp/hermes-tirith-fail-closed.patch
 
 # ── Agent install (only the selected agent) ───────────────────────────────────
 ARG AGENT=claude
@@ -161,6 +171,10 @@ RUN set -eu; \
           --skip-browser \
           --non-interactive; \
         rm /tmp/hermes-install.sh; \
+        HERMES_REPO=/home/node/.hermes/hermes-agent; \
+        echo ">>> Applying ASF Tirith fail-closed compatibility patch"; \
+        git -C "$HERMES_REPO" apply --check /tmp/hermes-tirith-fail-closed.patch; \
+        git -C "$HERMES_REPO" apply /tmp/hermes-tirith-fail-closed.patch; \
         echo ">>> Verifying the Hermes CLI installation (normally under 2 minutes)"; \
         test -x /home/node/.local/bin/hermes; \
         if ! timeout 120 /home/node/.local/bin/hermes --help >/dev/null; then \
@@ -182,6 +196,32 @@ RUN set -eu; \
 
 ENV PATH="/home/node/.local/bin:/home/node/.hermes/bin:${PATH}"
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
+# ── Hermes-only Tirith scanner (mandatory, pinned, checksum-verified) ────────
+# Installed to /usr/local/bin, outside the ~/.hermes named volume. Hermes
+# selects this absolute path so persistent user state cannot shadow it. With
+# tirith_fail_open:false a missing scanner blocks every terminal command, so a
+# failed download or checksum mismatch must FAIL THE BUILD, not degrade.
+USER root
+RUN set -eu; \
+    if [ "$AGENT" = "hermes" ]; then \
+        echo ">>> Installing Tirith ${TIRITH_VERSION}"; \
+        ARCH=$(dpkg --print-architecture); \
+        case "$ARCH" in \
+          amd64) TIRITH_TARGET=x86_64-unknown-linux-gnu; TIRITH_SHA256="$TIRITH_SHA256_AMD64" ;; \
+          arm64) TIRITH_TARGET=aarch64-unknown-linux-gnu; TIRITH_SHA256="$TIRITH_SHA256_ARM64" ;; \
+          *) echo "ERROR: unsupported architecture for tirith: $ARCH" >&2; exit 1 ;; \
+        esac; \
+        curl --fail --location --retry 5 --retry-delay 2 \
+          --output /tmp/tirith.tar.gz \
+          "https://github.com/sheeki03/tirith/releases/download/v${TIRITH_VERSION}/tirith-${TIRITH_TARGET}.tar.gz"; \
+        printf '%s  %s\n' "$TIRITH_SHA256" /tmp/tirith.tar.gz | sha256sum --check --strict -; \
+        tar -xzf /tmp/tirith.tar.gz -C /usr/local/bin tirith; \
+        rm /tmp/tirith.tar.gz; \
+        chmod 0755 /usr/local/bin/tirith; \
+        tirith --version; \
+    fi
+USER node
 
 # ── Hermes-only optional media + browser provisioning ────────────────────────
 # Hermes itself is mandatory above. Browser/TTS extras remain best-effort and

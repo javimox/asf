@@ -8,9 +8,8 @@
 #
 # Active layers: container boundary, firewall (hermes allowlist section),
 # approvals.mode=manual, redact_secrets, skill guards, allow_private_urls=false,
-# SOUL.md. Tirith pre-exec scanning is conditional on the binary being present;
-# with tirith_fail_open:false an absent/broken binary BLOCKS terminal commands.
-# Claude Code's pretooluse-guard.sh does NOT apply to Hermes.
+# SOUL.md. Tirith is image-provided and mandatory; setup aborts if the pinned
+# binary is missing or broken. Claude Code's pretooluse guard does not apply.
 set -euo pipefail
 
 AGENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,34 +45,15 @@ fi
 
 echo "  ✓ Hermes config injected (config.yaml, SOUL.md)"
 
-# Report Tirith scanner status. The binary is downloaded (SHA-256 verified) to
-# $HERMES_HOME/bin/tirith by a background thread WHEN THE AGENT STARTS — not by
-# this script and not on first command — then persists in the ~/.hermes volume.
-# So on a fresh volume it won't exist yet at this point; that's expected. When
-# it is present, probe it so a corrupt/incompatible binary is caught here rather
-# than surfacing as blocked commands later (fail_open is false).
-TIRITH_BIN=""
-if command -v tirith &>/dev/null; then
-    TIRITH_BIN="$(command -v tirith)"
-elif [[ -x "${HOME}/.hermes/bin/tirith" ]]; then
-    TIRITH_BIN="${HOME}/.hermes/bin/tirith"
-fi
-
-if [[ -n "$TIRITH_BIN" ]]; then
-    if "$TIRITH_BIN" --version &>/dev/null; then
-        echo "  ✓ Tirith scanner: present and runnable ($TIRITH_BIN)"
-    else
-        echo "  ✗ Tirith scanner: found at $TIRITH_BIN but it failed to run —"
-        echo "    with tirith_fail_open:false, terminal commands will be BLOCKED."
-        echo "    Check platform/arch, or delete it to force a re-download."
-    fi
+# Report the immutable Tirith scanner selected in config.yaml. It is installed
+# during the image build and must be runnable before Hermes starts.
+TIRITH_BIN="/usr/local/bin/tirith"
+if [[ -x "$TIRITH_BIN" ]] && "$TIRITH_BIN" --version &>/dev/null; then
+    echo "  ✓ Tirith scanner: present and runnable ($TIRITH_BIN)"
 else
-    echo "  ⋯ Tirith scanner: not present yet — Hermes downloads it in a"
-    echo "    background thread when the agent starts (SHA-256 verified, from"
-    echo "    GitHub releases; hosts already allowlisted). It persists after the"
-    echo "    first successful download."
-    echo "    NOTE: tirith_fail_open is false — terminal commands are BLOCKED"
-    echo "    until the binary is present (a few seconds on the very first run)."
+    echo "  ✗ Tirith scanner: missing or not runnable at $TIRITH_BIN"
+    echo "    Rebuild the Hermes image: ./sandbox.sh build hermes"
+    exit 1
 fi
 
 echo "  ✓ Run: hermes"

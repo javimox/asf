@@ -55,19 +55,17 @@ security:
   # Tirith — pre-execution command scanner (external binary).
   # Every terminal command is passed to `tirith check` before it runs (verified
   # in the Hermes source: terminal_tool -> approval -> check_command_security).
-  # Hermes downloads the binary (SHA-256 verified) to ~/.hermes/bin/tirith in a
-  # background thread when the agent starts — so it appears shortly after launch,
-  # then persists in the ~/.hermes volume. The required GitHub hosts are
-  # declared in agents/hermes/runtime.yml.
+  # The binary is installed at IMAGE BUILD time (pinned version, SHA-256
+  # verified) to /usr/local/bin/tirith — see .devcontainer/Dockerfile. Use the
+  # absolute path so an old binary in the persistent ~/.hermes volume cannot
+  # shadow the image-provided scanner. TIRITH_OFFLINE=1 keeps runtime scanning
+  # independent of release/update hosts.
   #
-  # fail_open: false = FAIL-CLOSED. If the scanner is missing, errors, or times
-  # out, the command is BLOCKED rather than run unscanned. Two consequences to
-  # know: (1) on the very first run, terminal commands are blocked during the
-  # few seconds the background download takes; (2) if the download ever fails,
-  # terminal commands stay blocked until it succeeds. Set back to true if you'd
-  # rather trade that safety for availability.
+  # fail_open: false = FAIL-CLOSED. ASF also applies the narrow
+  # tirith-fail-closed.patch at image build time so Hermes's circuit breaker
+  # honors this setting if repeated scanner failures occur.
   tirith_enabled: true
-  tirith_path: "tirith"
+  tirith_path: "/usr/local/bin/tirith"
   tirith_timeout: 5
   tirith_fail_open: false
 

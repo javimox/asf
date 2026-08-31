@@ -63,12 +63,13 @@ class TypedManifestTests(unittest.TestCase):
         self.assertEqual(model.llm.protocol, "openai")
         self.assertTrue(model.llm.broker)
         self.assertEqual(model.network.mode, "proxy")
-        self.assertIn("github.com", model.network.allow_domains)
-        self.assertEqual(model.network.verify_domain, "github.com")
+        self.assertEqual(model.network.allow_domains, ())
+        self.assertIsNone(model.network.verify_domain)
         self.assertEqual(
             model.environment_dict()["HERMES_YOLO_MODE"],
             "0",
         )
+        self.assertEqual(model.environment_dict()["TIRITH_OFFLINE"], "1")
 
     def test_prompt_observability_is_explicit_and_typed(self) -> None:
         model = parse(
@@ -248,6 +249,22 @@ class ValidationBoundaryTests(unittest.TestCase):
             with self.subTest(capabilities=capabilities):
                 with self.assertRaises(ManifestError):
                     validate({**MINIMAL, "capabilities": capabilities})
+
+    def test_tirith_build_pins_are_asf_owned(self) -> None:
+        for name in (
+            "TIRITH_VERSION",
+            "TIRITH_SHA256_AMD64",
+            "TIRITH_SHA256_ARM64",
+        ):
+            with self.subTest(name=name), self.assertRaisesRegex(
+                ManifestError, "cannot override ASF-owned build inputs"
+            ):
+                validate(
+                    {
+                        **MINIMAL,
+                        "runtime": {"build": {"args": {name: "override"}}},
+                    }
+                )
 
     def test_build_argument_names_and_os_boundary_values_are_validated(self) -> None:
         invalid = (
