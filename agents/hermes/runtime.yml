@@ -37,11 +37,9 @@ observability:
 network:
   # proxy -> domain allowlist through Caddy
   mode: proxy
-  verify_domain: github.com
-  allow_domains:
-    - github.com
-    - objects.githubusercontent.com
-    - raw.githubusercontent.com
+  # Broker mode needs no direct external destinations by default. Tirith is
+  # installed in the image and runs offline. Add only workload-required hosts.
+  allow_domains: []
 
   # routed -> explicit destination CIDRs; optional protocol/port restrictions
   # mode: routed
@@ -72,3 +70,4 @@ env:
   HERMES_WRITE_SAFE_ROOT: /workspace/repos:/home/node/.hermes
   HERMES_YOLO_MODE: "0"
   HERMES_REDACT_SECRETS: "true"
+  TIRITH_OFFLINE: "1"

@@ -474,17 +474,15 @@ persistent-`NET_ADMIN` compatibility fallback, but the default is to abort.
 
 ## 10. Install-time vs runtime egress
 
-A runtime's allowlist currently has to include whatever its *installer* needed.
-Hermes reaches GitHub so it can fetch Tirith at container start — which means
-the running model can use GitHub for the rest of the session.
+Runtime egress describes what the workload needs **while operating**, not what
+its installer needed once. Dependencies that can be resolved at image build
+time belong there, where the model never receives bootstrap access.
 
-Runtime egress should describe what the workload needs **while operating**, not
-what its installer needed once. Dependencies that can be resolved at image
-build time belong there, where the model never sees them.
-
-▶ Move adapter installs into the image where possible, then narrow the
-manifests. Confirm each adapter's real requirements with a fresh-volume
-integration test rather than assuming the redirect chain.
+Hermes previously allowed GitHub release hosts so its runtime Tirith
+auto-installer could fetch the scanner. Tirith is now pinned and
+checksum-verified during the Hermes image build, selected by absolute path, and
+run with `TIRITH_OFFLINE=1`. The default Hermes proxy allowlist is therefore
+empty; workload-specific external destinations must be declared explicitly.
 
 ## 11. Resolved: the global domain allowlist
 

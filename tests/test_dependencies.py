@@ -31,6 +31,9 @@ class DependencyPinTests(unittest.TestCase):
             "FZF_SHA256_AMD64",
             "FZF_SHA256_ARM64",
             "ZSH_IN_DOCKER_VERSION",
+            "TIRITH_VERSION",
+            "TIRITH_SHA256_AMD64",
+            "TIRITH_SHA256_ARM64",
         }
         # asf.conf holds build, broker, and hardening settings, so assert the
         # build pins are all present rather than that they are the only keys.
@@ -43,6 +46,9 @@ class DependencyPinTests(unittest.TestCase):
         self.assertRegex(dependencies["HERMES_AGENT_COMMIT"], r"^[0-9a-f]{40}$")
         self.assertRegex(dependencies["FZF_SHA256_AMD64"], r"^[0-9a-f]{64}$")
         self.assertRegex(dependencies["FZF_SHA256_ARM64"], r"^[0-9a-f]{64}$")
+        self.assertRegex(dependencies["TIRITH_VERSION"], r"^\d+\.\d+\.\d+$")
+        self.assertRegex(dependencies["TIRITH_SHA256_AMD64"], r"^[0-9a-f]{64}$")
+        self.assertRegex(dependencies["TIRITH_SHA256_ARM64"], r"^[0-9a-f]{64}$")
 
     def test_every_dockerfile_arg_has_a_pin(self) -> None:
         # Replaces the old exact-set assertion: drift is now caught by checking
@@ -113,6 +119,37 @@ class DependencyPinTests(unittest.TestCase):
             pinned = dict(AsfConfig.load(root / "asf.conf").values)
             for key, reference in references.items():
                 self.assertEqual(pinned[key], f"{reference}@sha256:{digest}")
+
+    def test_hermes_tirith_is_build_time_pinned_and_runtime_offline(self) -> None:
+        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        manifest = (ROOT / "agents" / "hermes" / "runtime.yml").read_text(
+            encoding="utf-8"
+        )
+        config = (ROOT / "agents" / "hermes" / "config.yaml").read_text(
+            encoding="utf-8"
+        )
+        setup = (ROOT / "agents" / "hermes" / "setup.sh").read_text(
+            encoding="utf-8"
+        )
+        compat = (
+            ROOT / "agents" / "hermes" / "patches" / "tirith-fail-closed.patch"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("tirith-${TIRITH_TARGET}.tar.gz", dockerfile)
+        self.assertIn("sha256sum --check --strict", dockerfile)
+        self.assertIn("tirith --version", dockerfile)
+        self.assertIn("hermes-tirith-fail-closed.patch", dockerfile)
+        self.assertIn('git -C "$HERMES_REPO" apply --check', dockerfile)
+        self.assertIn('allow_domains: []', manifest)
+        self.assertNotIn('github.com', manifest)
+        self.assertIn('TIRITH_OFFLINE: "1"', manifest)
+        self.assertIn('tirith_path: "/usr/local/bin/tirith"', config)
+        self.assertIn('TIRITH_BIN="/usr/local/bin/tirith"', setup)
+        self.assertIn('exit 1', setup)
+        self.assertIn('cfg["tirith_fail_open"]', compat)
+        self.assertIn('"action": "block"', compat)
 
     def test_shared_agent_image_keeps_routed_tools_minimal(self) -> None:
         dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(

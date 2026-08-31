@@ -73,6 +73,11 @@ constraint along with the sudo rule and all nine capabilities.
   it (`/yolo` is a user command, not a tool), and the container boundary still
   applies, but treat YOLO as an operator footgun, not a hard lock.
 - **`HERMES_REDACT_SECRETS=true`** — key patterns scrubbed from output/logs.
+- **Tirith command scanning** — the Hermes image contains a pinned,
+  checksum-verified Tirith binary at `/usr/local/bin/tirith`; Hermes selects it
+  by absolute path and runs it offline. ASF keeps `tirith_fail_open: false` and
+  applies a narrow compatibility patch so Hermes's circuit breaker honors that
+  setting. Tirith remains defense in depth, not an ASF sandbox boundary.
 - From `config.yaml`: `approvals.mode: manual`, `allow_private_urls: false`
   (SSRF protection), `allow_lazy_installs: false`, `guard_agent_created: true`.
 
