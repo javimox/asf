@@ -410,7 +410,10 @@ def build_krun_run_argv(
         # into the guest implicitly. ASF injects only the intended values.
         "--http-proxy=false",
     ]
-    if request.plan.runtime_mode == "interactive":
+    # Interactive opens keep the TTY/attach path. A one-shot command is the
+    # guest's initial foreground workload too, but it must remain automation-
+    # friendly and therefore does not allocate a TTY.
+    if command is None and request.plan.runtime_mode == "interactive":
         args.extend(
             (
                 "--interactive",

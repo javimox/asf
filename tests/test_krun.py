@@ -336,6 +336,24 @@ class KrunBackendTests(unittest.TestCase):
             ),
         )
 
+    def test_one_shot_run_uses_initial_guest_process_without_tty(self) -> None:
+        environment = build_krun_environment(self.request, broker_token="token")
+        command = ("python3", "-c", "print('two words')")
+
+        argv = build_krun_run_argv(self.request, environment, command=command)
+
+        self.assertNotIn("--interactive", argv)
+        self.assertNotIn("--tty", argv)
+        self.assertNotIn("--detach-keys=ctrl-p,ctrl-q", argv)
+        self.assertEqual(
+            argv[-5:],
+            (
+                "bash",
+                "/workspace/sandbox/.devcontainer/on-start.sh",
+                *command,
+            ),
+        )
+
     def test_routed_krun_broker_uses_fixed_ip_and_explicit_guest_route(self) -> None:
         hermes = load_model(ROOT / "agents" / "hermes" / "runtime.yml")
         routed = load_model(ROOT / "agents" / "routed-scanner" / "runtime.yml")

@@ -172,6 +172,12 @@ class DependencyPinTests(unittest.TestCase):
         self.assertIn('codex login --device-auth', setup)
         self.assertIn('codex login status', setup)
 
+    def test_shared_agent_image_includes_runtime_python_dependencies(self) -> None:
+        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(dockerfile, re.compile(r"^\s*python3-yaml\s*\\$", re.MULTILINE))
+
     def test_shared_agent_image_keeps_routed_tools_minimal(self) -> None:
         dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
             encoding="utf-8"

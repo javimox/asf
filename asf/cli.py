@@ -33,12 +33,12 @@ __all__ = ["main"]
 _REPOSITORY_COMMANDS = frozenset({"repo", "repository"})
 _SESSION_COMMANDS = frozenset({"ls", "observe", "capture"})
 _DIAGNOSTIC_COMMANDS = frozenset({"proxy", "broker"})
-_LIFECYCLE_COMMANDS = frozenset({"stop", "reset", "open", "shell"})
+_LIFECYCLE_COMMANDS = frozenset({"stop", "reset", "open", "run", "shell"})
 _EVIDENCE_COMMANDS = frozenset({"advise"})
 _MAINTENANCE_COMMANDS = frozenset({"build", "scan"})
 _USAGE = (
     "Usage: python3 -m asf "
-    "{open|shell|ls|observe|capture|repo|repository|build|scan|proxy|broker|test|advise|stop|reset} "
+    "{open|run|shell|ls|observe|capture|repo|repository|build|scan|proxy|broker|test|advise|stop|reset} "
     "[argument]\n"
 )
 _PODMAN_NOT_FOUND = (
@@ -87,7 +87,9 @@ _DISPATCH: dict[str, Callable[..., object]] = {
 }
 
 _HELP = """
-  ./sandbox.sh open <agent>        start a sandbox session
+  ./sandbox.sh open <agent>        start an interactive sandbox session
+  ./sandbox.sh run <agent> -- <command> [args...]
+                                  run one command in a fresh sandbox session
   ./sandbox.sh shell [agent]       attach to a running agent session
   ./sandbox.sh ls                  show running and deployed agent sessions
   ./sandbox.sh observe [agent]     show host-side session and privilege state

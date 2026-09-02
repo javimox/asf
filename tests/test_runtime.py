@@ -133,6 +133,18 @@ class RuntimeCommandTests(unittest.TestCase):
             self.assertEqual(result, 23)
             opened.assert_called_once_with("routed-scanner")
 
+    def test_run_passes_one_shot_command_as_an_argv_vector(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "checkout"
+            paths = create_checkout(
+                root, ROOT / "agents" / "claude" / "runtime.yml", "claude"
+            )
+            command = ("python3", "-c", "print('two words')")
+            with mock.patch.object(RuntimeService, "open", return_value=17) as opened:
+                result = run_runtime_command(("run", "claude", "--", *command), paths)
+            self.assertEqual(result, 17)
+            opened.assert_called_once_with("claude", command=command)
+
 
     def test_routed_allocation_lock_covers_plan_persistence_and_network_creation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -220,6 +232,22 @@ class RuntimeCommandTests(unittest.TestCase):
         self.assertIn("FIRST=one", argv)
         self.assertIn("SECOND=two words", argv)
         self.assertEqual(argv[-2:], ("--", "zsh"))
+
+    def test_devcontainer_exec_preserves_one_shot_command_boundaries(self) -> None:
+        paths = RepoPaths.for_root(ROOT)
+        manifest = load_model(ROOT / "agents" / "codex" / "runtime.yml")
+        plan = build_runtime_plan(
+            manifest,
+            paths=paths,
+            owner_pid=4242,
+            broker_globally_enabled=False,
+        )
+        service = RuntimeService(paths, PodmanClient(runner=RecordingRunner()))
+        command = ("python3", "-c", "print('two words')")
+        argv = service._devcontainer_exec_argv(plan, (), command=command)
+
+        self.assertEqual(argv[-4:], ("--", *command))
+        self.assertNotIn("sh", argv[-4:])
 
     def test_devcontainer_start_failure_keeps_the_open_contract(self) -> None:
         paths = RepoPaths.for_root(ROOT)

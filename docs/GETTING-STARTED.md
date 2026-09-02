@@ -174,6 +174,20 @@ To pre-build an agent without starting a session:
 ./sandbox.sh build hermes
 ```
 
+For automation that needs one non-interactive process but the normal ASF
+lifecycle and security policy, use `run`:
+
+```bash
+./sandbox.sh run codex -- codex --version
+```
+
+`run` starts a fresh session using the runtime's configured isolation backend,
+executes the command as an argv vector, and performs the normal ASF cleanup when
+it exits. With `container` isolation it uses the Dev Container execution path;
+with `microvm` isolation the command becomes the krun guest's initial foreground
+workload after the normal startup checks. It does not pipe a shell command
+through the interactive `open` path.
+
 ### Codex ChatGPT login
 
 The supplied `codex` runtime uses Codex's native ChatGPT authentication and does
@@ -303,3 +317,103 @@ or hooks for safety is a human task (or a separate Claude session).
 - Two repositories with the same basename cannot be assigned to the same agent
   because both would mount at the same container path; `repo add` rejects the
   second one.
+
+## Experimental AI review loop
+
+`tools/ai-review-loop.sh` is a deliberately small host-side prototype for a
+three-round Codex -> Claude -> Codex coding review. It creates a disposable
+linked worktree/branch, mounts the task worktree read-write, and mounts
+host-generated Git evidence separately read-only. ASF's normal framework
+checkout remains visible read-only at `/workspace/sandbox`; it is not used as
+the task branch's writable Git authority.
+
+```bash
+cat > /tmp/asf-task.txt <<'EOF'
+Describe one small ASF issue here.
+EOF
+
+tools/ai-review-loop.sh example-task /tmp/asf-task.txt HEAD
+```
+
+Start from a clean ASF checkout; the loop rejects tracked or ordinary untracked
+changes that would not be represented by the selected base commit.
+
+The host commits each round and remains the merge authority. Agents do not
+communicate directly. Each round gets a fresh ASF session and uses that agent's
+configured isolation backend (`container` or `microvm`). The defaults are
+`gpt-5.6-sol` for Codex and `claude-opus-5` for Claude; override them with
+`ASF_REVIEW_CODEX_MODEL` and `ASF_REVIEW_CLAUDE_MODEL`.
+
+Each model round uses the CLI's structured automation output. The loop keeps the
+raw JSONL, sandbox/runtime log, final answer, and usage summary under the host-only
+evidence directory. Agents receive only a read-only `*-input` subdirectory with
+the original task and host-generated Git evidence, so later reviewers cannot read
+previous model transcripts. Before each host commit, ignored untracked scratch
+files are removed so Git remains the authoritative round-to-round handoff. The
+terminal prints compact live tool activity instead of build noise. A round is bounded by
+`ASF_REVIEW_TIMEOUT` (30 minutes by default), so a stalled CLI cannot wait
+forever.
+
+The gate is intentionally smaller than the repository's full test suite. Its
+purpose is to execute any untrusted task code away from the host, not to recreate
+every CI environment inside an agent image. Before any model round, the loop
+runs the selected gate once on the untouched base. If that preflight is red, the
+normal path stops before spending model tokens. After round 3, the host
+orchestrator runs the derived-file refresh inside ASF and commits any resulting
+changes, then runs the same gate again. By default the refresh and gate are:
+
+```bash
+# sandboxed refresh after round 3
+python3 tools/generate_sbom.py
+
+# sandboxed preflight/final gate
+python3 tools/generate_sbom.py --check
+```
+
+Set `ASF_REVIEW_REFRESH=` to skip the derived-file refresh, or override it with
+another explicit sandboxed command. The review/audit agents are told not to
+spend turns regenerating derived files unless the task itself changes their
+generator or policy.
+
+For a task with a deterministic focused check, override the gate explicitly:
+
+```bash
+ASF_REVIEW_GATE='python3 tools/generate_sbom.py --check; python3 -m unittest tests.test_dependencies' \
+  tools/ai-review-loop.sh example-task /tmp/asf-task.txt HEAD
+```
+
+If a focused gate is knowingly red on the selected base for known unittest
+tests, `ASF_REVIEW_BASELINE=1` changes the strict preflight into attribution of
+those named `FAIL:`/`ERROR:` tests and allows the same failures at the end. The
+comparison is
+intentionally narrow: if the baseline failure cannot be identified safely, the
+loop stops instead of guessing. The baseline gate must also leave the worktree
+unchanged.
+
+```bash
+ASF_REVIEW_BASELINE=1 \
+ASF_REVIEW_GATE='python3 -m unittest tests.test_example' \
+  tools/ai-review-loop.sh example-task /tmp/asf-task.txt HEAD
+```
+
+The base-gate result is also written to the agents' read-only input directory as
+`base-gate.txt`, naming any pre-existing `FAIL:`/`ERROR:` tests. Review rounds
+are told to treat it as their baseline rather than rediscovering it; a named
+failure is only revisited when the task or current diff directly targets that
+behavior.
+
+The agents are still instructed to run focused tests during their own rounds.
+Claude's review is bounded by `ASF_REVIEW_CLAUDE_MAX_TURNS` (40 by default) as a
+runaway stop rather than a budget; `ASF_REVIEW_TIMEOUT` bounds the round. If a
+round hits the cap, the loop says so explicitly instead of reporting a generic
+stream failure. If that failed round changed the task tree, the host commits the
+partial work as `ai-review: <label> ... (round N failed)` before stopping; if it
+changed nothing, no empty failure commit is added. In both cases the worktree and
+evidence remain for inspection, and the loop prints the exact unlock/remove
+commands needed to discard the failed review. A successful final gate must also
+leave the reviewed worktree clean;
+ignored test scratch is removed and any other gate-side mutation fails the loop.
+Run the complete regression matrix in the repository's disposable CI workflows
+after human inspection. The loop prints the `git push -u origin ai/<task>`
+command when an `origin` remote exists, but never executes it. Nothing is merged
+or pushed automatically; the worktree and evidence remain for human review.
