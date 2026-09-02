@@ -1,0 +1,36 @@
+# OpenAI Codex CLI runtime.
+#
+# This supplied profile intentionally uses Codex's native ChatGPT login rather
+# than an OpenAI API key. LiteLLM is therefore disabled; Caddy still enforces
+# the explicit runtime egress allowlist.
+
+name: codex
+description: OpenAI Codex CLI with ChatGPT login
+adapter: codex
+
+runtime:
+  mode: interactive
+  isolation: container  # container or microvm
+
+filesystem:
+  # Codex keeps login/session/config state under CODEX_HOME. The named volume
+  # persists it across container replacement and image rebuilds until reset.
+  state:
+    - key: config
+      target: /home/node/.codex
+
+llm:
+  broker: false
+
+network:
+  mode: proxy
+  verify_domain: chatgpt.com
+  allow_domains:
+    - chatgpt.com
+    - auth.openai.com
+
+# Native ChatGPT login needs no host secret env files. Keeping the supplied
+# profile secret-free also avoids exposing unrelated common.env credentials to
+# the Codex process.
+env:
+  CODEX_HOME: /home/node/.codex

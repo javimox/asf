@@ -153,15 +153,16 @@ so files stay owned by you. (Check with `id -u` on the host.)
 
 ```bash
 ./sandbox.sh open claude    # Claude Code
+./sandbox.sh open codex     # OpenAI Codex CLI
 ./sandbox.sh open hermes    # Hermes agent
 ```
 
 Each agent has its **own image**. Opening `claude` builds and runs an image that
 contains only Claude Code — it never runs the Hermes installer (which is slow).
-Opening `hermes` builds a separate image with only Hermes. The two images share
-all the common tooling layers (git, zsh, uv, etc.) from the build
-cache, so the first build of each agent is the only slow one; switching back to
-an already-built agent is fast.
+Opening `hermes` or `codex` builds a separate image containing only that agent.
+The agent images share the common tooling layers (git, zsh, uv, etc.) from the
+build cache, so the first build of each agent is the only slow one; switching
+back to an already-built agent is fast.
 
 Agent selection is injected as a Docker build arg (`AGENT`), which gives each
 agent a distinct image. Policy files for the active agent are injected at every
@@ -172,6 +173,30 @@ To pre-build an agent without starting a session:
 ```bash
 ./sandbox.sh build hermes
 ```
+
+### Codex ChatGPT login
+
+The supplied `codex` runtime uses Codex's native ChatGPT authentication and does
+not start LiteLLM. It deliberately declares no host secret environment files,
+so an API key or unrelated shared credential is not injected into Codex merely
+because it exists in `secrets/common.env`. After opening it, sign in from inside
+the sandbox with device-code authentication:
+
+```bash
+./sandbox.sh open codex
+# inside the sandbox
+codex login --device-auth
+codex login status
+codex
+```
+
+Device-code login avoids exposing a localhost callback port from the sandbox.
+Codex stores its local login/session state under `/home/node/.codex`, which ASF
+persists in the agent's declared state volume. `./sandbox.sh reset codex`
+removes that state, including ChatGPT authentication and the model selection
+stored by Codex in `config.toml`; the next open recreates an empty private
+`CODEX_HOME`. The supplied proxy policy permits only `auth.openai.com` for
+authentication/token refresh and `chatgpt.com` for the Codex service.
 
 ## Git workflow: commit inside, push outside
 

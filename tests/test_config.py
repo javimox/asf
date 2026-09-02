@@ -30,7 +30,7 @@ class AsfConfigTests(unittest.TestCase):
             config.build_arguments()[0],
             f"NODE_IMAGE={config.values['NODE_IMAGE']}",
         )
-        self.assertEqual(len(config.build_arguments()), 13)
+        self.assertEqual(len(config.build_arguments()), 14)
 
     def test_digest_pinned_image_references_are_plain_configuration_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

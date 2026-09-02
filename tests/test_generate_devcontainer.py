@@ -76,7 +76,7 @@ class GenerateDevcontainerTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        for runtime in ("claude", "hermes"):
+        for runtime in ("claude", "codex", "hermes"):
             target = self.root / "agents" / runtime
             target.mkdir()
             target.joinpath("runtime.yml").write_text(
@@ -159,6 +159,22 @@ class GenerateDevcontainerTests(unittest.TestCase):
         )
         self.assertTrue(
             any("target=/workspace/repos/project" in item for item in config["mounts"])
+        )
+
+    def test_codex_configuration_uses_native_login_state_without_broker(self) -> None:
+        request = self.request("codex", broker=True)
+        config = build_devcontainer_config(request)
+
+        self.assertEqual(config["build"]["args"]["AGENT"], "codex")
+        self.assertEqual(config["containerEnv"]["ASF_AGENT"], "codex")
+        self.assertEqual(config["containerEnv"]["CODEX_HOME"], "/home/node/.codex")
+        self.assertEqual(request.plan.secret_files, ())
+        self.assertNotIn("ASF_BROKER_ENABLED", config["containerEnv"])
+        self.assertNotIn("OPENAI_BASE_URL", config["containerEnv"])
+        self.assertIn(
+            f"source={request.plan.persistent_volumes[0].name},"
+            "target=/home/node/.codex,type=volume",
+            config["mounts"],
         )
 
     def test_read_only_repository_renders_readonly_bind_mount(self) -> None:

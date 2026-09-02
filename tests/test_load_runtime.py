@@ -326,6 +326,14 @@ class ShippedManifestTests(unittest.TestCase):
             "/workspace/repos:/home/node/.hermes",
         )
 
+        codex = load_runtime.load_model(ROOT / "agents" / "codex" / "runtime.yml")
+        self.assertEqual(codex.adapter, "codex")
+        self.assertEqual(codex.state_volumes[0].target, "/home/node/.codex")
+        self.assertIsNotNone(codex.llm)
+        self.assertFalse(codex.llm.broker)
+        self.assertEqual(codex.network.allow_domains, ("chatgpt.com", "auth.openai.com"))
+        self.assertEqual(codex.secret_files, ())
+
     def test_service_command_preserves_argument_boundaries(self) -> None:
         model = load_runtime.parse({
             **MINIMAL,

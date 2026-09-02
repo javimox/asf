@@ -10,6 +10,7 @@ ARG TZ
 ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=2.1.216
+ARG CODEX_CLI_VERSION=0.151.0
 ARG SEMGREP_VERSION=1.171.0
 ARG HERMES_AGENT_COMMIT=f9eca7e15f1c2bfe5194aae5aa489af53c0a1a23
 # Tirith — Hermes's pre-execution command scanner. Installed at BUILD time,
@@ -160,6 +161,10 @@ RUN set -eu; \
         echo ">>> Installing Claude Code ${CLAUDE_CODE_VERSION}"; \
         npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
         claude --version ;; \
+      codex) \
+        echo ">>> Installing Codex CLI ${CODEX_CLI_VERSION}"; \
+        npm install -g "@openai/codex@${CODEX_CLI_VERSION}"; \
+        codex --version ;; \
       hermes) \
         echo ">>> Installing Hermes agent at ${HERMES_AGENT_COMMIT}"; \
         curl --fail --location --retry 5 --retry-delay 2 \
@@ -189,7 +194,7 @@ RUN set -eu; \
         python3 --version; uv --version ;; \
       *) \
         echo "ERROR: unknown AGENT='$AGENT'" >&2; \
-        echo "  Known adapters: claude, hermes, generic" >&2; \
+        echo "  Known adapters: claude, codex, hermes, generic" >&2; \
         echo "  Set 'adapter: generic' in agents/$AGENT/runtime.yml" >&2; \
         exit 1 ;; \
     esac
