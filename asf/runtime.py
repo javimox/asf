@@ -141,8 +141,13 @@ class RuntimeService:
         self.routed_allocator = self.routed_allocator or RoutedAllocator(self.podman)
         self.verifier = self.verifier or StartupVerifier(self.podman)
 
-    def open(self, runtime: str) -> int:
+    def open(
+        self, runtime: str, *, command: Sequence[str] | None = None
+    ) -> int:
         manifest = load_model(self.paths.identity.runtime_manifest(runtime))
+        command_override = tuple(command) if command is not None else None
+        if command_override is not None and not command_override:
+            raise ValidationError("run command must not be empty")
         if manifest.network.mode not in {"proxy", "isolated", "routed"}:
             raise ConfigurationError(
                 f"unsupported network.mode: {manifest.network.mode}"
@@ -219,12 +224,19 @@ class RuntimeService:
                 )
                 if manifest.runtime.isolation == "microvm":
                     child, session_environment = self._prepare_microvm(
-                        manifest, config, plan, support
+                        manifest, config, plan, support, command=command_override
                     )
                 else:
-                    child = self._prepare_container(manifest, config, plan, support)
+                    child = self._prepare_container(
+                        manifest, config, plan, support, command=command_override
+                    )
                     session_environment = None
-                if plan.runtime_mode == "service":
+                if command_override is not None:
+                    self.output.write(
+                        f"  {_DIM}running one-shot command: "
+                        f"{command_override[0]}{_RESET}\n"
+                    )
+                elif plan.runtime_mode == "service":
                     self.output.write(
                         f"  {_DIM}running: {' '.join(plan.command)}{_RESET}\n"
                     )
@@ -375,6 +387,8 @@ class RuntimeService:
         config: AsfConfig,
         plan: RuntimePlan,
         support: _SupportServices,
+        *,
+        command: Sequence[str] | None = None,
     ) -> tuple[Sequence[str], dict[str, str]]:
         """Build the foreground ``podman run --runtime=krun`` command."""
 
@@ -406,9 +420,10 @@ class RuntimeService:
             krun_request,
             session_environment,
             engine=os.fspath(self.podman.engine),
+            command=command,
         )
         self.output.write(f"{_BLUE}Starting krun microVM...{_RESET}\n")
-        if plan.runtime_mode == "interactive":
+        if command is None and plan.runtime_mode == "interactive":
             self.output.write(
                 f"  {_DIM}Detach without stopping: Ctrl-P, Ctrl-Q{_RESET}\n"
             )
@@ -421,6 +436,8 @@ class RuntimeService:
         config: AsfConfig,
         plan: RuntimePlan,
         support: _SupportServices,
+        *,
+        command: Sequence[str] | None = None,
     ) -> Sequence[str]:
         """Generate and start the Dev Container; return the exec command."""
 
@@ -435,7 +452,9 @@ class RuntimeService:
         )
         self._start_devcontainer(plan, environment)
         remote_environment = self._runtime_environment(manifest, plan, support)
-        return self._devcontainer_exec_argv(plan, remote_environment)
+        return self._devcontainer_exec_argv(
+            plan, remote_environment, command=command
+        )
 
     def _build_and_create_plan(
         self,
@@ -997,7 +1016,7 @@ def run_runtime_command(
     if isinstance(arguments, (str, bytes)):
         raise TypeError("runtime arguments must be a sequence")
     argv = tuple(arguments)
-    if not argv or argv[0] not in {"open", "shell"}:
+    if not argv or argv[0] not in {"open", "run", "shell"}:
         raise ValidationError("unsupported runtime command")
     service = RuntimeService(
         paths,
@@ -1009,7 +1028,15 @@ def run_runtime_command(
     if argv[0] == "open":
         if not runtime:
             raise ValidationError("Usage: ./sandbox.sh open <agent>")
+        if len(argv) != 2:
+            raise ValidationError("Usage: ./sandbox.sh open <agent>")
         return service.open(runtime)
+    if argv[0] == "run":
+        if len(argv) < 4 or argv[2] != "--":
+            raise ValidationError(
+                "Usage: ./sandbox.sh run <agent> -- <command> [args...]"
+            )
+        return service.open(runtime, command=argv[3:])
     return service.shell(runtime, replace_process=replace_process)
 
 

@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     python3-pip \
+    python3-yaml \
     && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
     && locale-gen \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

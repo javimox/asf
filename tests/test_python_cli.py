@@ -49,7 +49,7 @@ class PythonCliTests(unittest.TestCase):
         status = main(["unknown"], stdout=stdout, stderr=stderr)
         self.assertEqual(status, 1)
         self.assertEqual(stdout.getvalue(), "")
-        self.assertIn("{open|shell|ls|observe|capture|repo|repository|build|scan", stderr.getvalue())
+        self.assertIn("{open|run|shell|ls|observe|capture|repo|repository|build|scan", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_open_requires_a_runtime(self) -> None:
@@ -59,6 +59,19 @@ class PythonCliTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertEqual(stdout.getvalue(), "")
         self.assertEqual(stderr.getvalue(), "Usage: ./sandbox.sh open <agent>\n")
+
+    def test_run_requires_agent_separator_and_command(self) -> None:
+        for argv in (["run"], ["run", "claude"], ["run", "claude", "echo"]):
+            with self.subTest(argv=argv):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                status = main(argv, stdout=stdout, stderr=stderr)
+                self.assertEqual(status, 1)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertEqual(
+                    stderr.getvalue(),
+                    "Usage: ./sandbox.sh run <agent> -- <command> [args...]\n",
+                )
 
     def test_repo_commands_are_nested_and_agent_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -108,7 +121,7 @@ class PythonCliTests(unittest.TestCase):
         stderr = io.StringIO()
         status = main(["repos"], stdout=io.StringIO(), stderr=stderr)
         self.assertEqual(status, 1)
-        self.assertIn("{open|shell|ls|observe|capture|repo|repository|build|scan", stderr.getvalue())
+        self.assertIn("{open|run|shell|ls|observe|capture|repo|repository|build|scan", stderr.getvalue())
 
     def test_ls_renders_running_agent_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
