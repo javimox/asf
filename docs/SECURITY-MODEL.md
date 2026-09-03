@@ -8,16 +8,21 @@ limitations. For the concise trust boundary and threat-model summary, start with
 
 Defense in depth, from outside in:
 
-1. **Container boundary.** The host filesystem is not generally exposed to the
-   agent. ASF always mounts its own checkout read-only at `/workspace/sandbox`
-   (with `/workspace/sandbox/secrets` shadowed by an empty read-only tmpfs), then
-   adds only repositories listed in `agents/<name>/repos.yml` and declared named
-   volumes. Repository entries may be `rw` or `ro`.
+1. **Runtime boundary.** The host filesystem is not generally exposed to the
+   agent. The default backend is a normal container; `runtime.isolation:
+   microvm` runs the agent workload under libkrun/KVM while the VMM remains in
+   the surrounding rootless Podman runtime. ASF always mounts its own checkout
+   read-only at `/workspace/sandbox` (with `/workspace/sandbox/secrets` shadowed
+   by an empty read-only tmpfs), then adds only repositories listed in
+   `agents/<name>/repos.yml` and declared named volumes. Repository entries may
+   be `rw` or `ro`.
 2. **Rootless engine.** Podman runs as your unprivileged user; there is no root
    daemon. A container escape yields only your existing user privileges.
-3. **Non-root container user, no capabilities.** The container runs as `node`
+3. **Non-root agent, no capabilities.** Agent-controlled work runs as `node`
    with `--cap-drop=ALL`, `no-new-privileges`, and **no `sudo` at all** — there
-   is no sudoers rule, because nothing inside needs privilege.
+   is no sudoers rule, because nothing inside needs privilege. The krun guest
+   bootstrap enforces the same agent identity and capability state inside the
+   microVM.
 4. **Network topology.** The agent joins one `--internal` network, which has no
    gateway. It cannot reach the internet directly; there is no route to filter.
    All egress goes through a Caddy proxy container that allows only the domains
@@ -60,6 +65,29 @@ by `EXTENDED_HARDENING_ENABLED` or `TMPFS_ENABLED`.
 `no-new-privileges` is **on**. Earlier versions had to disable it because the
 in-container firewall ran through `sudo`; moving enforcement out removed that
 constraint along with the sudo rule and all nine capabilities.
+
+### Seccomp by isolation backend
+
+ASF does not maintain a custom seccomp profile. The backend semantics differ:
+
+- **`container`** — the agent runs under the host kernel and inherits Podman's
+  default OCI seccomp filter. The accepted runtime baseline is a non-root agent
+  with empty capability sets, `NoNewPrivs: 1`, `Seccomp: 2`, and at least one
+  active seccomp filter.
+- **`microvm`** — `/proc` inside the guest describes the guest kernel. The
+  non-root agent still has empty capability sets and `NoNewPrivs: 1`, but ASF
+  does not currently install a guest seccomp filter, so guest processes report
+  `Seccomp: 0`. This does not describe the host-side VMM. The krun VMM is
+  started through the same rootless Podman hardening path; host-side acceptance
+  verified it as non-root, capability-less, `NoNewPrivs: 1`, seccomp-filtered,
+  and isolated from the host shell by its Podman namespaces.
+
+ASF does not add guest seccomp merely to make both backends report the same
+`/proc` state. With krun, the guest kernel/KVM boundary separates agent syscalls
+from the host kernel, while the host-side VMM remains subject to the surrounding
+Podman controls. Seccomp is defense in depth, not an authoritative ASF policy
+boundary. See [KRUN.md](KRUN.md) for the microVM-specific boundary.
+
 ## Hermes-specific hardening
 
 `./sandbox.sh open hermes` applies these automatically:

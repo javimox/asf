@@ -12,10 +12,13 @@ rather than audit the tree.
 
 ## What ASF is
 
-ASF runs an AI agent (Claude Code, Codex, Hermes, or any containerised workload)
-inside a locked-down Podman container. You keep a shell; the agent works in the
-box. The controller is **`sandbox.sh`** — a command-line tool that runs, sets
-up, and exits. It is not a daemon and holds no privileges between runs.
+ASF runs an AI agent (Claude Code, Codex, Hermes, or another supported workload)
+inside a locked-down rootless Podman runtime. The default isolation backend is
+a normal container; `runtime.isolation: microvm` places the agent workload in a
+libkrun/KVM microVM while Podman still constrains the host-side VMM. You keep a
+shell; the agent works inside that runtime boundary. The controller is
+**`sandbox.sh`** — a command-line tool that runs, sets up, and exits. It is not
+a daemon and holds no privileges between runs.
 
 ## The 60-second mental model
 
@@ -31,7 +34,7 @@ up, and exits. It is not a daemon and holds no privileges between runs.
    ├─ routed only: starts a capability-less gateway and a short-lived
    │               NET_ADMIN initializer asf/routed.py
    ├─ VERIFIES the effective policy      aborts if it fails
-   ├─ starts ONE agent container
+   ├─ starts ONE agent runtime            container or krun microVM
    └─ on exit removes every ephemeral owned resource
 ```
 
@@ -92,14 +95,18 @@ capability-less by default.
   their own runtime-visible session credentials may persist in a declared state
   volume (for example Codex under `/home/node/.codex`).
   (`asf/runtime.py`, `asf/devcontainer.py`, `.devcontainer/on-start.sh`)
-- **The container acting as root on your host.** Unprivileged user
-  (`--user=1000:1000`), every capability dropped, `no-new-privileges` set.
-  Two further layers are inherited from rootless Podman rather than pinned
-  by ASF, and you should know that: syscall filtering uses Podman's
-  *default seccomp profile* (version-dependent), and host isolation rests
-  on the rootless *user-namespace mapping* of your Podman installation.
-  ASF adds no custom seccomp profile on purpose — keeping the delta
-  against a stock rootless Podman small keeps this page auditable.
+- **The agent acting as root on your host.** ASF requests an unprivileged user
+  (`--user=1000:1000`), drops every capability by default, and sets
+  `no-new-privileges`. With normal container isolation the agent runs under the
+  host kernel and inherits Podman's *default seccomp profile* (version-dependent).
+  With microVM isolation, the guest agent has the same non-root/empty-capability/
+  `NoNewPrivs` baseline but no guest seccomp filter; its `/proc` therefore reports
+  `Seccomp: 0`. The host-side krun VMM remains in the rootless Podman boundary;
+  acceptance verifies it as non-root, capability-less, `NoNewPrivs: 1`, with
+  Podman seccomp active and separate Podman namespaces. ASF intentionally adds
+  no custom or guest seccomp profile merely for backend parity. Host isolation
+  still depends in part on the rootless *user-namespace mapping* of your Podman
+  installation.
 - **The agent managing containers.** No container receives the Podman socket.
   Only `sandbox.sh`, on your host, talks to Podman.
 - **Leftovers.** Runtime and support containers, networks, routed reservation,
@@ -127,7 +134,8 @@ capability-less by default.
 |---|---|
 | Linux capabilities | **none by default** — `--cap-drop=ALL`; only manifest-declared `NET_RAW` is supported |
 | `no-new-privileges` | **on** |
-| `sudo` inside the container | **none** — no sudoers rule exists |
+| Seccomp | container: Podman default filter; microVM guest: no guest filter; host-side krun VMM: Podman default filter |
+| `sudo` inside the agent runtime | **none** — no sudoers rule exists |
 | User | `1000:1000`, non-root |
 | Networks joined by the agent | private internal network; routed mode adds one scan network with declared routes only |
 
@@ -188,8 +196,8 @@ data cannot leave through trusted internal services.
 - **It does not judge what the agent does** within its granted capabilities.
   ASF controls capabilities, not reasoning.
 - **The pre-tool-use hook is a safety net, not a boundary.** Regex on the
-  command string, bypassable by design. The real boundaries are the container,
-  the network topology, and the non-root user.
+  command string, bypassable by design. The real boundaries are runtime
+  isolation, the network topology, and the non-root user.
 
 ## Verifying this yourself
 

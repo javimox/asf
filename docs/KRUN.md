@@ -196,6 +196,25 @@ routed initializer    temporary NET_ADMIN, then exits
 The initializer creates/configures TAP and loads nftables before the agent
 starts.
 
+### Seccomp semantics
+
+Seccomp state inside the microVM and on the host-side VMM describes two
+different kernels and must not be compared as if they were the same process.
+
+Inside the guest, agent-controlled work is non-root, has an empty capability
+set by default, and runs with `NoNewPrivs=1`. ASF does not currently install a
+guest seccomp profile, so `/proc/self/status` reports `Seccomp: 0` there.
+
+The host-side krun VMM is still launched through rootless Podman with ASF's
+normal hardening arguments. The accepted host baseline is non-root, no Linux
+capabilities, `NoNewPrivs=1`, Podman's seccomp filter active, and separate
+Podman user/mount/network/IPC/UTS/PID/cgroup namespaces from the host shell.
+
+ASF intentionally does not add guest seccomp only to mirror the container
+backend. The microVM adds a guest-kernel/KVM boundary, while the host-side VMM
+remains constrained by the surrounding Podman runtime. Seccomp is treated as
+defense in depth rather than an ASF policy boundary.
+
 ## Interactive lifecycle
 
 Start:
