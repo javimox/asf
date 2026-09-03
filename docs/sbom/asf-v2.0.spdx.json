@@ -18,7 +18,7 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/2.0/5d99e3250e8754ca",
+  "documentNamespace": "https://asf.invalid/spdx/2.0/2fc0e8f3de5df48e",
   "name": "ASF-2.0-source-deployment-inventory",
   "packages": [
     {
@@ -26,7 +26,7 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "5d99e3250e8754cae872f64e333e3f0445a475934dc8b66204a40459397f9c2b"
+          "checksumValue": "2fc0e8f3de5df48ed6dae1253872c5d2afb69b7ed6b55c1fa8dd545e191faef5"
         }
       ],
       "comment": "Deterministic source-tree digest over 228 files using sorted SHA-256 file digests and relative paths. Git checkouts inventory tracked files only; source archives use the archive contents. Generated caches, build outputs, session artifacts, local .claude settings, and docs/sbom/ are excluded. Regenerate with tools/generate_sbom.py.",
@@ -37,7 +37,7 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "5d99e3250e8754cae872f64e333e3f0445a475934dc8b66204a40459397f9c2b"
+        "packageVerificationCodeValue": "2fc0e8f3de5df48ed6dae1253872c5d2afb69b7ed6b55c1fa8dd545e191faef5"
       },
       "versionInfo": "2.0"
     }
