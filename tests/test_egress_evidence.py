@@ -28,11 +28,9 @@ class EgressEvidenceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name) / "asf"
         (self.root / "agents" / "claude").mkdir(parents=True)
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         (self.root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
-        (self.root / ".devcontainer" / "devcontainer.base.json").write_text(
-            "{}\n", encoding="utf-8"
-        )
         (self.root / "agents" / "claude" / "runtime.yml").write_text(
             (ROOT / "agents" / "claude" / "runtime.yml").read_text(encoding="utf-8"),
             encoding="utf-8",

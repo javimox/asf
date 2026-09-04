@@ -71,7 +71,7 @@ case "$tool_name" in
     fi
 
     # Sandbox policy paths (mount is read-only; this adds a clear message)
-    if grep -Eq '/workspace/sandbox/(agents|\.devcontainer)' <<<"$command"; then
+    if grep -Eq '/workspace/sandbox/(agents|containers)' <<<"$command"; then
       deny "Blocked access to sandbox policy paths."
     fi
 
@@ -93,7 +93,7 @@ case "$tool_name" in
     if grep -Eq '(^|/)\.env(\.|$)|\.pem$|\.key$|credentials|secrets/' <<<"$path"; then
       deny "Blocked write to likely secret material."
     fi
-    if grep -Eq '/workspace/sandbox/(agents|\.devcontainer)' <<<"$path"; then
+    if grep -Eq '/workspace/sandbox/(agents|containers)' <<<"$path"; then
       deny "Blocked modification of sandbox policy files."
     fi
     ;;

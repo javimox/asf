@@ -147,7 +147,7 @@ direct proxy-bypass denial, non-allowlisted HTTPS denial, and retained Caddy
 evidence for the allow and deny requests.
 
 For krun development, feature-progress checks such as starting Hermes,
-reaching LiteLLM/OpenAI, attach/detach behavior, and routed-mode experiments are
+reaching LiteLLM/OpenAI, interactive microVM console behavior, and routed-mode experiments are
 manual acceptance tests unless they uncover a stable regression that cannot be
 covered cheaply at unit level. Avoid adding one permanent integration script
 per feature combination. Before a krun release, review the live tests and

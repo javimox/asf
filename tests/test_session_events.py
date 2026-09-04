@@ -20,7 +20,8 @@ class SessionEventTests(unittest.TestCase):
             root.mkdir()
             (root / "sandbox.sh").write_text("#!/bin/sh\n")
             (root / "agents").mkdir()
-            (root / ".devcontainer").mkdir()
+            (root / "containers").mkdir()
+            (root / ".asf").mkdir()
             with mock.patch.dict(
                 os.environ, {"XDG_STATE_HOME": str(Path(temporary) / "state")}
             ):
@@ -55,7 +56,8 @@ class SessionEventTests(unittest.TestCase):
             root.mkdir()
             (root / "sandbox.sh").write_text("#!/bin/sh\n")
             (root / "agents").mkdir()
-            (root / ".devcontainer").mkdir()
+            (root / "containers").mkdir()
+            (root / ".asf").mkdir()
             paths = RepoPaths.for_root(root)
             self.assertEqual(read_session_events(paths, "hermes"), ())
 

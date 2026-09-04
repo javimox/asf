@@ -10,7 +10,7 @@ if [[ "$(uname -s)" != Linux ]]; then
     echo "test_routed_integration.sh: skipped (Linux only)"
     exit 0
 fi
-for tool in podman devcontainer python3 flock; do
+for tool in podman python3 flock; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "test_routed_integration.sh: skipped ($tool not found)"
         exit 0

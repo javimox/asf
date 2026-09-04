@@ -263,7 +263,6 @@ class RuntimePlanTests(unittest.TestCase):
             kinds,
             {
                 GeneratedFileKind.RUNTIME_PLAN,
-                GeneratedFileKind.DEVCONTAINER,
                 GeneratedFileKind.PROXY_POLICY,
             },
         )
@@ -495,14 +494,15 @@ class RuntimePlanWriteTests(unittest.TestCase):
             root = Path(temporary) / "asf"
             outside = Path(temporary) / "outside"
             (root / "agents" / "demo").mkdir(parents=True)
-            (root / ".devcontainer" / "sessions").mkdir(parents=True)
+            (root / "containers").mkdir()
+            (root / ".asf" / "sessions").mkdir(parents=True)
             outside.mkdir()
             (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
             (root / "agents" / "demo" / "runtime.yml").write_text(
                 "name: demo\nnetwork:\n  mode: proxy\n",
                 encoding="utf-8",
             )
-            (root / ".devcontainer" / "sessions" / "demo").symlink_to(
+            (root / ".asf" / "sessions" / "demo").symlink_to(
                 outside, target_is_directory=True
             )
             paths = RepoPaths.for_root(root)

@@ -1,4 +1,4 @@
-# Manual integration run: real podman + devcontainer, dummy provider key.
+# Manual integration run: real rootless Podman, dummy provider key.
 # Heavy (image build) — deliberately not part of every push.
 
 name: Integration
@@ -21,9 +21,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-yaml
-
-      - name: Install devcontainer CLI
-        run: npm install -g @devcontainers/cli
 
       - name: Run integration test
         run: ASF_INTEGRATION=1 ./tests/test_integration.sh

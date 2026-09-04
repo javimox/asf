@@ -32,7 +32,6 @@ from asf.podman import PodmanClient  # noqa: E402
 from asf.process import CommandResult  # noqa: E402
 from asf.runtime import RuntimeService  # noqa: E402
 from asf.runtime_plan import (  # noqa: E402
-    GeneratedFileKind,
     RoutedSubnetAllocation,
     RuntimePlanError,
     build_runtime_plan,
@@ -78,7 +77,7 @@ class KrunBackendTests(unittest.TestCase):
                 "--ulimit=nofile=4096:65536",
                 "--ulimit=core=0:0",
             ),
-            build_arguments=("NODE_VERSION=22.23.1",),
+            build_arguments=("CLAUDE_CODE_VERSION=9.9.9",),
         )
 
     def test_routed_microvm_uses_local_tap_runtime_unless_overridden(self) -> None:
@@ -104,7 +103,8 @@ class KrunBackendTests(unittest.TestCase):
             root = Path(tmp)
             (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
             (root / "agents").mkdir()
-            (root / ".devcontainer").mkdir()
+            (root / "containers").mkdir()
+            (root / ".asf").mkdir()
             runtime_dir = root / "tools" / "krun-runtime"
             install = runtime_dir / "bin"
             install.mkdir(parents=True)
@@ -139,10 +139,6 @@ class KrunBackendTests(unittest.TestCase):
     def test_runtime_plan_persists_isolation_and_rejects_backend_drift(self) -> None:
         self.assertEqual(self.plan.runtime_isolation, "microvm")
         self.assertEqual(self.plan.to_dict()["runtime_isolation"], "microvm")
-        self.assertNotIn(
-            GeneratedFileKind.DEVCONTAINER,
-            {item.kind for item in self.plan.generated_files},
-        )
         changed = replace(
             self.manifest,
             runtime=replace(self.manifest.runtime, isolation="container"),
@@ -238,38 +234,25 @@ class KrunBackendTests(unittest.TestCase):
                 {"PODMAN_CONNECTIONS_CONF": "/tmp/injected"},
             )
 
-    def test_build_argv_uses_the_existing_agent_dockerfile(self) -> None:
+    def test_build_argv_uses_the_thin_agent_containerfile(self) -> None:
         argv = build_krun_build_argv(self.request)
         self.assertEqual(argv[:2], ("podman", "build"))
-        self.assertIn(str(ROOT / ".devcontainer" / "Dockerfile"), argv)
-        self.assertIn("AGENT=claude", argv)
-        self.assertIn("NODE_VERSION=22.23.1", argv)
+        self.assertIn(str(ROOT / "containers" / "claude" / "Containerfile"), argv)
+        self.assertIn("ASF_BASE_IMAGE=localhost/" + self.paths.identity.prefix.lower() + "-base:runtime", argv)
+        self.assertIn("CLAUDE_CODE_VERSION=9.9.9", argv)
         self.assertEqual(argv[-1], str(ROOT))
 
-    def test_existing_krun_image_is_reused_and_missing_image_is_built(self) -> None:
-        for returncode, expected_builds in ((0, 0), (1, 1)):
-            with self.subTest(returncode=returncode):
-                runner = mock.Mock(
-                    return_value=CommandResult(("podman",), returncode, "", "")
-                )
-                podman = PodmanClient(engine="podman", runner=runner)
-                output = io.StringIO()
-                service = RuntimeService(
-                    self.paths,
-                    podman,
-                    output,
-                    io.StringIO(),
-                    verifier=mock.Mock(),
-                )
-                with mock.patch.object(RuntimeService, "_build_krun_image") as build:
-                    service._ensure_krun_image(self.request)
-                self.assertEqual(build.call_count, expected_builds)
-                self.assertEqual(
-                    tuple(runner.call_args.args[0])[:3],
-                    ("podman", "image", "exists"),
-                )
-                if returncode == 0:
-                    self.assertIn("cached", output.getvalue())
+    def test_krun_uses_the_shared_runtime_image_builder(self) -> None:
+        service = RuntimeService(
+            self.paths, PodmanClient(engine="podman"), io.StringIO(), io.StringIO(), verifier=mock.Mock()
+        )
+        config = mock.Mock(spec=AsfConfig)
+        with (
+            mock.patch("asf.runtime.AsfConfig.load", return_value=config),
+            mock.patch.object(RuntimeService, "_build_runtime_image") as build,
+        ):
+            service._ensure_krun_image(self.request)
+        build.assert_called_once_with(self.request.manifest, config)
 
     def test_environment_keeps_broker_and_runtime_secrets_out_of_argv(self) -> None:
         environment = build_krun_environment(
@@ -291,19 +274,17 @@ class KrunBackendTests(unittest.TestCase):
         self.assertIn("--env ANTHROPIC_AUTH_TOKEN", joined)
         self.assertIn("--env SAFE_SETTING", joined)
 
-    def test_framework_identity_and_devcontainer_marker_cannot_be_overridden(self) -> None:
+    def test_framework_identity_cannot_be_overridden(self) -> None:
         environment = build_krun_environment(
             self.request,
             broker_token="token",
             runtime_environment=(
                 ("ASF_AGENT", "wrong"),
                 ("ASF_ISOLATION", "container"),
-                ("DEVCONTAINER", "true"),
             ),
         )
         self.assertEqual(environment["ASF_AGENT"], self.plan.runtime)
         self.assertEqual(environment["ASF_ISOLATION"], "microvm")
-        self.assertNotIn("DEVCONTAINER", environment)
 
     def test_service_run_has_no_tty_and_only_one_user_mapping(self) -> None:
         service_manifest = replace(
@@ -330,7 +311,7 @@ class KrunBackendTests(unittest.TestCase):
             argv[-4:],
             (
                 "bash",
-                "/workspace/sandbox/.devcontainer/on-start.sh",
+                "/workspace/sandbox/containers/on-start.sh",
                 "python3",
                 "serve.py",
             ),
@@ -349,7 +330,7 @@ class KrunBackendTests(unittest.TestCase):
             argv[-5:],
             (
                 "bash",
-                "/workspace/sandbox/.devcontainer/on-start.sh",
+                "/workspace/sandbox/containers/on-start.sh",
                 *command,
             ),
         )
@@ -443,7 +424,6 @@ class KrunBackendTests(unittest.TestCase):
         self.assertIn("--detach-keys=ctrl-p,ctrl-q", argv)
         self.assertIn("--userns=keep-id:uid=1000,gid=1000", argv)
         self.assertIn("--user=1000:1000", argv)
-        self.assertIn("--unsetenv=DEVCONTAINER", argv)
         self.assertIn("--http-proxy=false", argv)
         self.assertIn(f"--network={self.plan.runtime_container.attachments[0].network}", argv)
         self.assertIn("target=/workspace/sandbox,readonly", joined)
@@ -452,12 +432,12 @@ class KrunBackendTests(unittest.TestCase):
         self.assertIn("--ulimit=core=0:0", argv)
         self.assertEqual(
             argv[-3:],
-            ("bash", "/workspace/sandbox/.devcontainer/on-start.sh", "zsh"),
+            ("bash", "/workspace/sandbox/containers/on-start.sh", "zsh"),
         )
-        self.assertTrue(joined.endswith("bash /workspace/sandbox/.devcontainer/on-start.sh zsh"))
+        self.assertTrue(joined.endswith("bash /workspace/sandbox/containers/on-start.sh zsh"))
 
     def test_routed_microvm_bootstrap_rejects_default_routes(self) -> None:
-        source = (ROOT / ".devcontainer" / "on-start.sh").read_text(encoding="utf-8")
+        source = (ROOT / "containers" / "on-start.sh").read_text(encoding="utf-8")
         self.assertIn("ip -4 route show default | grep -q .", source)
         self.assertIn("ip -6 route show default | grep -q .", source)
         self.assertIn("unexpected IPv4 default route", source)
@@ -467,11 +447,12 @@ class KrunBackendTests(unittest.TestCase):
 
 
 class KrunLifecycleTests(unittest.TestCase):
-    def test_open_selects_krun_backend_instead_of_devcontainer(self) -> None:
+    def test_open_selects_microvm_backend(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asf"
             (root / "agents" / "krun-test").mkdir(parents=True)
-            (root / ".devcontainer").mkdir()
+            (root / "containers").mkdir()
+            (root / ".asf").mkdir()
             (root / "sandbox.sh").write_text("#!/bin/sh\n")
             (root / "asf.conf").write_text("BROKER_ENABLED=false\n")
             (root / "agents" / "krun-test" / "runtime.yml").write_text(
@@ -547,15 +528,11 @@ class KrunLifecycleTests(unittest.TestCase):
                 mock.patch(
                     "asf.runtime.build_krun_run_argv", return_value=child
                 ),
-                mock.patch.object(RuntimeService, "_generate_devcontainer") as generate_dc,
-                mock.patch.object(RuntimeService, "_start_devcontainer") as start_dc,
                 mock.patch("asf.runtime.run_open_session", return_value=0) as run_session,
             ):
                 self.assertEqual(service.open("krun-test"), 0)
 
             ensure_image.assert_called_once_with(krun_request)
-            generate_dc.assert_not_called()
-            start_dc.assert_not_called()
             run_session.assert_called_once()
             self.assertEqual(run_session.call_args.args[0], child)
             self.assertEqual(
@@ -610,7 +587,7 @@ class SharedEgressEnvironmentTests(unittest.TestCase):
             return object() if role in self._roles else None
 
     def test_both_isolation_paths_share_one_egress_wiring(self) -> None:
-        from asf.devcontainer import apply_egress_environment
+        from asf.runtime_container import apply_egress_environment
         from asf.manifest import load_model
         from asf.session import SessionRole
         import tempfile
@@ -630,7 +607,7 @@ class SharedEgressEnvironmentTests(unittest.TestCase):
             manifest=manifest,
             proxy_port=3128,
             broker_default_model="",
-            broker_token="${localEnv:ASF_BROKER_TOKEN}",
+            broker_token="tok-container",
         )
         krun_env: dict[str, str] = {}
         apply_egress_environment(
@@ -643,7 +620,7 @@ class SharedEgressEnvironmentTests(unittest.TestCase):
         )
         self.assertEqual(
             container_env.pop("ANTHROPIC_AUTH_TOKEN"),
-            "${localEnv:ASF_BROKER_TOKEN}",
+            "tok-container",
         )
         self.assertEqual(krun_env.pop("ANTHROPIC_AUTH_TOKEN"), "tok-123")
         # Everything except the token transport is byte-identical.

@@ -11,13 +11,12 @@ dependencies that the operator controls.
 | PyYAML | `>=6,<7` | major range | runtime manifests |
 | setuptools | `>=77` when building a wheel | build range | package metadata/build backend |
 | Podman | rootless, Netavark backend | host-managed | containers, networks, secrets, volumes |
-| Dev Container CLI | compatible current release | host-managed | default `container` backend build/up/exec boundary |
 | ASF TAP-capable crun | optional | repository-pinned source + CI-tested | routed `runtime.isolation: microvm` backend |
 | system krun + libkrun + KVM | optional | host-managed | microVM boundary; system `krun` is used for isolated/proxy mode |
 | Bash | `>=4` for test harnesses | host-managed | tests and small fixed scripts |
 | ShellCheck | optional | host-managed | shell static analysis |
 
-Podman, Dev Container CLI, system krun and libkrun are host-managed. Routed
+Podman, system krun and libkrun are host-managed. Routed
 microVM mode pins the small TAP-capable crun frontend by source under
 `tools/krun-runtime/`; hosts build it locally and dedicated CI validates the
 pin. Record the versions relevant to the backend used for release validation:
@@ -27,7 +26,6 @@ python3 --version
 python3 -c 'import yaml; print(yaml.__version__)'
 podman --version
 podman info --format '{{.Host.NetworkBackend}}'
-devcontainer --version
 krun --version                 # system runtime for isolated/proxy microVM
 tools/krun-runtime/bin/crun --version  # routed local runtime
 ```
@@ -68,8 +66,8 @@ applications.
 ## GitHub Actions
 
 GitHub Actions are pinned by commit SHA. CI installs ShellCheck from the Ubuntu
-runner and runs `tests/run.sh`. The manual integration workflow installs the
-Dev Container CLI and runs the real lifecycle.
+runner and runs `tests/run.sh`. The manual integration workflow exercises the
+real rootless Podman lifecycle.
 
 ## SBOM scope
 
@@ -78,6 +76,6 @@ generated from this checkout. In Git checkouts it inventories tracked files only
 so local untracked files do not change the release digest. Its timestamp comes
 from `CITATION.cff`'s release date.
 It records ASF, PyYAML, pinned tools, and image references.
-It is not an image-layer SBOM. Generate image-specific SBOMs on the release host
-after builds, for example with Syft or Podman's available SBOM tooling, and
-archive them with the release artifacts.
+It is not an image-layer SBOM. Image-layer and per-agent SBOM generation is not
+part of the current release process; add it only when the project has a concrete
+need that justifies the extra release machinery.

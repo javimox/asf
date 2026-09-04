@@ -21,7 +21,8 @@ def make_checkout(root: Path) -> None:
     (root / "agents" / "claude" / "runtime.yml").write_text(
         "name: claude\n", encoding="utf-8"
     )
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
+    (root / ".asf").mkdir()
 
 
 class PythonCliTests(unittest.TestCase):

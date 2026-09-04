@@ -56,14 +56,15 @@ security:
   # Every terminal command is passed to `tirith check` before it runs (verified
   # in the Hermes source: terminal_tool -> approval -> check_command_security).
   # The binary is installed at IMAGE BUILD time (pinned version, SHA-256
-  # verified) to /usr/local/bin/tirith — see .devcontainer/Dockerfile. Use the
+  # verified) to /usr/local/bin/tirith — see containers/hermes/Containerfile. Use the
   # absolute path so an old binary in the persistent ~/.hermes volume cannot
   # shadow the image-provided scanner. TIRITH_OFFLINE=1 keeps runtime scanning
   # independent of release/update hosts.
   #
-  # fail_open: false = FAIL-CLOSED. ASF also applies the narrow
-  # tirith-fail-closed.patch at image build time so Hermes's circuit breaker
-  # honors this setting if repeated scanner failures occur.
+  # fail_open: false = FAIL-CLOSED. ASF also enforces a narrow build-time
+  # compatibility fix so Hermes's circuit breaker honors this setting if
+  # repeated scanner failures occur. The build fails if the expected upstream
+  # circuit-breaker block is no longer present exactly once.
   tirith_enabled: true
   tirith_path: "/usr/local/bin/tirith"
   tirith_timeout: 5

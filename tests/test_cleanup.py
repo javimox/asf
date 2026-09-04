@@ -105,7 +105,8 @@ class CleanupExecutorTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         self.identity = ResourceIdentity.from_physical_path(self.root)
         self.live: set[int] = set()
         self.lock_manager = SessionLockManager(
@@ -682,7 +683,8 @@ class EndToEndCleanupTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         (self.root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
         for runtime in ("claude", "hermes"):
             agent = self.root / "agents" / runtime

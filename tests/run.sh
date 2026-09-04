@@ -14,7 +14,7 @@ export ASF_TEST_STATE_GUARD="$TEST_STATE_HOME"
 
 bash -n \
     "$ROOT/sandbox.sh" \
-    "$ROOT"/.devcontainer/*.sh \
+    "$ROOT"/containers/*.sh \
     "$ROOT"/agents/*/setup.sh \
     "$ROOT"/tests/*.sh \
     "$ROOT"/tests/lib/*.sh \
@@ -23,7 +23,7 @@ bash -n \
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck --severity=warning --external-sources \
         "$ROOT/sandbox.sh" \
-        "$ROOT"/.devcontainer/*.sh \
+        "$ROOT"/containers/*.sh \
         "$ROOT"/agents/*/setup.sh \
         "$ROOT"/tests/*.sh \
         "$ROOT"/tests/lib/*.sh \

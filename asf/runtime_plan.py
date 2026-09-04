@@ -68,7 +68,6 @@ class NetworkRole(str, Enum):
 
 class GeneratedFileKind(str, Enum):
     RUNTIME_PLAN = "runtime-plan"
-    DEVCONTAINER = "devcontainer"
     PROXY_POLICY = "proxy-policy"
     ROUTED_POLICY = "routed-policy"
 
@@ -539,10 +538,6 @@ def build_runtime_plan(
     generated = [
         GeneratedFilePlan(GeneratedFileKind.RUNTIME_PLAN, runtime_plan_path(paths, runtime)),
     ]
-    if manifest.runtime.isolation == "container":
-        generated.append(
-            GeneratedFilePlan(GeneratedFileKind.DEVCONTAINER, identity.config_json(runtime))
-        )
     if mode == "proxy":
         generated.append(
             GeneratedFilePlan(

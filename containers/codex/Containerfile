@@ -1,0 +1,9 @@
+ARG ASF_BASE_IMAGE
+FROM ${ASF_BASE_IMAGE}
+
+ARG CODEX_CLI_VERSION=0.151.0
+USER root
+RUN mkdir -p /home/node/.codex && chown -R node:node /home/node/.codex
+USER node
+RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" \
+    && codex --version

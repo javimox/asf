@@ -94,7 +94,7 @@ capability-less by default.
   Native interactive-login clients are different: when explicitly configured,
   their own runtime-visible session credentials may persist in a declared state
   volume (for example Codex under `/home/node/.codex`).
-  (`asf/runtime.py`, `asf/devcontainer.py`, `.devcontainer/on-start.sh`)
+  (`asf/runtime.py`, `asf/runtime_container.py`, `containers/on-start.sh`)
 - **The agent acting as root on your host.** ASF requests an unprivileged user
   (`--user=1000:1000`), drops every capability by default, and sets
   `no-new-privileges`. With normal container isolation the agent runs under the
@@ -111,8 +111,8 @@ capability-less by default.
   Only `sandbox.sh`, on your host, talks to Podman.
 - **Leftovers.** Runtime and support containers, networks, routed reservation,
   and the temporary provider secret are removed on exit; only declared state
-  volumes persist. Generated session configuration remains under
-  `.devcontainer/sessions/` for diagnostics and deterministic reuse. Per-run
+  volumes persist. Generated runtime plans remain under
+  `.asf/sessions/` for diagnostics and deterministic reuse. Per-run
   host evidence is stored separately under
   `${XDG_STATE_HOME:-$HOME/.local/state}/asf/<checkout-id>/sessions/<agent>/runs/`
   and is not mounted into the agent runtime by ASF. It includes `policy.json`,
@@ -161,10 +161,15 @@ The proxy container is separately constrained: `--cap-drop=ALL`,
 `no-new-privileges`, read-only root, 128 MB, 64 PIDs. The LiteLLM broker is
 also capability-less and read-only, with a 64 MB tmpfs, 256 PIDs, 1 GiB, and
 one CPU. Its provider key is sent to Podman through standard input and mounted
-as a temporary secret. Dev Container startup output is streamed through the
-shared redactor before it reaches stdout, stderr, or retained failure
-diagnostics, and the session token is scoped to `devcontainer up` rather than
-inherited by the later exec client. (`asf/broker.py`, `asf/process.py`,
+as a temporary secret. For normal container isolation, ASF writes runtime
+bootstrap/session values to a mode-0600 temporary env file used only for
+container creation and deletes it immediately afterwards. Values loaded from
+ASF secret files are not written to the container configuration: workload and
+shell processes pass only `--env NAME` to `podman exec`, with the matching
+values supplied through that Podman process environment. microVM launch uses
+the same name-only Podman boundary for its complete guest environment. Host
+diagnostics are streamed through the shared redactor before reaching stdout,
+stderr, or retained failure output. (`asf/broker.py`, `asf/process.py`,
 `asf/runtime.py`)
 
 ## Network modes

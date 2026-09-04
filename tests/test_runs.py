@@ -27,7 +27,8 @@ from ipaddress import IPv4Network
 def make_paths(root: Path) -> RepoPaths:
     (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     (root / "agents").mkdir()
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
+    (root / ".asf").mkdir()
     with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root.parent / "state")}):
         return RepoPaths.for_root(root)
 

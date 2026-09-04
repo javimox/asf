@@ -36,7 +36,7 @@ python3 -m unittest tests.test_release
 
 Notes: the SBOM is a source/deployment inventory; it does not replace
 image-layer SBOM generation on the release host. Generated checkout state under
-`.devcontainer/sessions/` and host evidence under `$XDG_STATE_HOME/asf/` (or
+`.asf/sessions/` and host evidence under `$XDG_STATE_HOME/asf/` (or
 `~/.local/state/asf/`) are never part of a release.
 If a source archive is produced manually, use `git archive` rather than zipping
 a live working tree so ignored caches and local files cannot leak into it.

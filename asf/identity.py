@@ -165,26 +165,23 @@ class ResourceIdentity:
 
         return (
             self.script_dir
-            / ".devcontainer"
+            / ".asf"
             / "sessions"
             / validate_runtime_name(runtime)
         )
-
-    def config_json(self, runtime: str) -> Path:
-        return self.session_dir(runtime) / "devcontainer.json"
 
     def proxy_config_dir(self, runtime: str) -> Path:
         return self.session_dir(runtime) / "proxy"
 
     def broker_state(self, runtime: str) -> Path:
         runtime = validate_runtime_name(runtime)
-        return self.script_dir / ".devcontainer" / f".broker-host-{runtime}"
+        return self.script_dir / ".asf" / f".broker-host-{runtime}"
 
     def session_lock(self, runtime: str) -> Path:
         """Lock directory created with ``mkdir``; holds the owner PID."""
 
         runtime = validate_runtime_name(runtime)
-        return self.script_dir / ".devcontainer" / f".open-lock-{runtime}"
+        return self.script_dir / ".asf" / f".open-lock-{runtime}"
 
     def runtime_manifest(self, runtime: str) -> Path:
         return (
@@ -282,7 +279,6 @@ class ResourceIdentity:
             "session_key": self.session_key(runtime),
             "container_name": self.container_name(runtime),
             "session_label": self.session_label(runtime),
-            "config_json": str(self.config_json(runtime)),
             "proxy_config_dir": str(self.proxy_config_dir(runtime)),
             "broker_state": str(self.broker_state(runtime)),
             "session_lock": str(self.session_lock(runtime)),

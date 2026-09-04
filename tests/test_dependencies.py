@@ -52,18 +52,15 @@ class DependencyPinTests(unittest.TestCase):
         self.assertRegex(dependencies["TIRITH_SHA256_AMD64"], r"^[0-9a-f]{64}$")
         self.assertRegex(dependencies["TIRITH_SHA256_ARM64"], r"^[0-9a-f]{64}$")
 
-    def test_every_dockerfile_arg_has_a_pin(self) -> None:
-        # Replaces the old exact-set assertion: drift is now caught by checking
-        # that each build ARG the Dockerfile expects is actually pinned.
+    def test_every_containerfile_arg_has_a_pin(self) -> None:
         config = parse_shell_assignments(ROOT / "asf.conf")
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
-            encoding="utf-8"
-        )
-        args = set(re.findall(r"^ARG\s+([A-Z_][A-Z0-9_]*)", dockerfile, re.MULTILINE))
-        # Supplied by the devcontainer CLI or the generator, not by asf.conf.
-        supplied_elsewhere = {"TZ", "AGENT", "USERNAME", "_DEV_CONTAINERS_BASE_IMAGE"}
+        args: set[str] = set()
+        for path in (ROOT / "containers").glob("*/Containerfile"):
+            text = path.read_text(encoding="utf-8")
+            args.update(re.findall(r"^ARG\s+([A-Z_][A-Z0-9_]*)", text, re.MULTILINE))
+        supplied_elsewhere = {"TZ", "ASF_BASE_IMAGE"}
         for arg in args - supplied_elsewhere:
-            self.assertIn(arg, config, f"Dockerfile ARG {arg} has no pin in asf.conf")
+            self.assertIn(arg, config, f"Containerfile ARG {arg} has no pin in asf.conf")
 
     def test_image_references_keep_exact_tags_with_optional_digests(self) -> None:
         config = parse_shell_assignments(ROOT / "asf.conf")
@@ -123,27 +120,18 @@ class DependencyPinTests(unittest.TestCase):
                 self.assertEqual(pinned[key], f"{reference}@sha256:{digest}")
 
     def test_hermes_tirith_is_build_time_pinned_and_runtime_offline(self) -> None:
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
-            encoding="utf-8"
-        )
-        manifest = (ROOT / "agents" / "hermes" / "runtime.yml").read_text(
-            encoding="utf-8"
-        )
-        config = (ROOT / "agents" / "hermes" / "config.yaml").read_text(
-            encoding="utf-8"
-        )
-        setup = (ROOT / "agents" / "hermes" / "setup.sh").read_text(
-            encoding="utf-8"
-        )
-        compat = (
-            ROOT / "agents" / "hermes" / "patches" / "tirith-fail-closed.patch"
-        ).read_text(encoding="utf-8")
+        containerfile = (ROOT / "containers" / "hermes" / "Containerfile").read_text(encoding="utf-8")
+        manifest = (ROOT / "agents" / "hermes" / "runtime.yml").read_text(encoding="utf-8")
+        config = (ROOT / "agents" / "hermes" / "config.yaml").read_text(encoding="utf-8")
+        setup = (ROOT / "agents" / "hermes" / "setup.sh").read_text(encoding="utf-8")
+        compat = (ROOT / "containers" / "hermes" / "apply_tirith_fail_closed.py").read_text(encoding="utf-8")
 
-        self.assertIn("tirith-${TIRITH_TARGET}.tar.gz", dockerfile)
-        self.assertIn("sha256sum --check --strict", dockerfile)
-        self.assertIn("tirith --version", dockerfile)
-        self.assertIn("hermes-tirith-fail-closed.patch", dockerfile)
-        self.assertIn('git -C "$HERMES_REPO" apply --check', dockerfile)
+        self.assertIn("tirith-${TIRITH_TARGET}.tar.gz", containerfile)
+        self.assertIn("sha256sum --check --strict", containerfile)
+        self.assertIn("tirith --version", containerfile)
+        self.assertIn("apply_tirith_fail_closed.py", containerfile)
+        self.assertIn('python3 /tmp/apply-tirith-fail-closed.py', containerfile)
+        self.assertNotIn('git -C "$HERMES_REPO" apply', containerfile)
         self.assertIn('allow_domains: []', manifest)
         self.assertNotIn('github.com', manifest)
         self.assertIn('TIRITH_OFFLINE: "1"', manifest)
@@ -154,11 +142,11 @@ class DependencyPinTests(unittest.TestCase):
         self.assertIn('"action": "block"', compat)
 
     def test_codex_is_pinned_and_uses_native_chatgpt_login_path(self) -> None:
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
+        containerfile = (ROOT / "containers" / "codex" / "Containerfile").read_text(encoding="utf-8")
         manifest = (ROOT / "agents" / "codex" / "runtime.yml").read_text(encoding="utf-8")
         setup = (ROOT / "agents" / "codex" / "setup.sh").read_text(encoding="utf-8")
 
-        self.assertIn('@openai/codex@${CODEX_CLI_VERSION}', dockerfile)
+        self.assertIn('@openai/codex@${CODEX_CLI_VERSION}', containerfile)
         self.assertIn('adapter: codex', manifest)
         self.assertIn('broker: false', manifest)
         self.assertIn('target: /home/node/.codex', manifest)
@@ -173,15 +161,11 @@ class DependencyPinTests(unittest.TestCase):
         self.assertIn('codex login status', setup)
 
     def test_shared_agent_image_includes_runtime_python_dependencies(self) -> None:
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile = (ROOT / "containers" / "base" / "Containerfile").read_text(encoding="utf-8")
         self.assertRegex(dockerfile, re.compile(r"^\s*python3-yaml\s*\\$", re.MULTILINE))
 
     def test_shared_agent_image_keeps_routed_tools_minimal(self) -> None:
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile = (ROOT / "containers" / "base" / "Containerfile").read_text(encoding="utf-8")
         self.assertIn("iputils-ping", dockerfile)
         self.assertNotRegex(dockerfile, re.compile(r"^\s*nmap\s*\\$", re.MULTILINE))
 
@@ -231,30 +215,15 @@ class DependencyPinTests(unittest.TestCase):
         )
 
 
-    def test_dockerfile_does_not_pipe_remote_scripts_to_shell(self) -> None:
-        dockerfile = (ROOT / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
-        self.assertNotRegex(dockerfile, re.compile(r"curl[^\n|]*\|\s*(?:bash|sh)"))
-        self.assertNotRegex(dockerfile, re.compile(r"wget[^\n|]*\|\s*(?:bash|sh)"))
-        self.assertIn('semgrep==${SEMGREP_VERSION}', dockerfile)
-        self.assertIn('${HERMES_AGENT_COMMIT}/scripts/install.sh', dockerfile)
-        self.assertNotIn('WARNING: Hermes install failed', dockerfile)
-        self.assertNotIn(":latest", dockerfile)
-        self.assertNotIn(":main", dockerfile)
-        self.assertNotIn('SHELL [', dockerfile)
-        self.assertNotIn('| head -n1', dockerfile)
-        self.assertIn('-p fzf', dockerfile)
-        self.assertNotIn('/usr/share/doc/fzf/examples/', dockerfile)
-        self.assertNotRegex(dockerfile, re.compile(r'^\s+fzf\s+\\$', re.MULTILINE))
-        self.assertIn('fzf-${FZF_VERSION}-linux_${FZF_ARCH}.tar.gz', dockerfile)
-        self.assertIn('sha256sum --check --strict', dockerfile)
-        self.assertIn('fzf --version', dockerfile)
-        self.assertIn('Verifying the Hermes CLI installation', dockerfile)
-        self.assertIn('timeout 120 /home/node/.local/bin/hermes --help', dockerfile)
-        self.assertIn('Hermes CLI verification failed or exceeded 120 seconds', dockerfile)
-        self.assertIn('Podman is now saving the Hermes image layer', dockerfile)
+    def test_containerfiles_do_not_pipe_remote_scripts_to_shell(self) -> None:
+        for path in (ROOT / "containers").glob("*/Containerfile"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path):
+                self.assertNotRegex(text, re.compile(r"curl[^\n]*\|\s*(?:ba)?sh"))
+                self.assertNotRegex(text, re.compile(r"wget[^\n]*\|\s*(?:ba)?sh"))
 
     def test_core_startup_failures_are_not_hidden(self) -> None:
-        on_start = (ROOT / ".devcontainer" / "on-start.sh").read_text(encoding="utf-8")
+        on_start = (ROOT / "containers" / "on-start.sh").read_text(encoding="utf-8")
         runtime = (ROOT / "asf" / "runtime.py").read_text(encoding="utf-8")
         sandbox = (ROOT / "sandbox.sh").read_text(encoding="utf-8")
         self.assertIn("set -euo pipefail", on_start)

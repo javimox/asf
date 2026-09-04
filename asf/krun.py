@@ -5,8 +5,7 @@ routed helpers) as ordinary rootless Podman containers. Only the untrusted
 agent workload uses ``--runtime=krun``.
 
 krun cannot currently inject a second process into an already-running microVM,
-so the agent command is the initial foreground workload. ASF therefore does not
-use the Dev Container CLI on this path.
+so the agent command is the initial foreground workload.
 """
 
 from __future__ import annotations
@@ -19,7 +18,8 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from .errors import ConfigurationError, InfrastructureError, ValidationError
-from .devcontainer import apply_egress_environment, build_mounts
+from .runtime_container import apply_egress_environment, build_mounts
+from .runtime_image import build_runtime_image_argv
 from .models import RuntimeManifest
 from .paths import RepoPaths
 from .repositories import RepositoryEntry
@@ -254,11 +254,11 @@ def require_krun_host(
 def krun_image_name(plan: RuntimePlan) -> str:
     """Return a checkout-scoped local image tag for the agent workload."""
 
-    return f"localhost/{plan.session_key.lower()}:krun"
+    return f"localhost/{plan.session_key.lower()}:runtime"
 
 
 def _krun_image_name_for_runtime(paths: RepoPaths, runtime: str) -> str:
-    return f"localhost/{paths.identity.session_key(runtime).lower()}:krun"
+    return f"localhost/{paths.identity.session_key(runtime).lower()}:runtime"
 
 
 def build_krun_image_argv(
@@ -268,38 +268,19 @@ def build_krun_image_argv(
     build_arguments: Sequence[str] = (),
     engine: str = "podman",
 ) -> tuple[str, ...]:
-    """Build a krun image without constructing a runtime/network plan."""
+    """Return the thin runtime-image build command used by krun."""
 
     validate_krun_beta(manifest)
-    args: list[str] = [
-        engine,
-        "build",
-        "--tag",
-        _krun_image_name_for_runtime(paths, manifest.name),
-        "--file",
-        str(paths.devcontainer_dir / "Dockerfile"),
-    ]
-    values: dict[str, str] = {
-        "TZ": os.environ.get("TZ", "UTC") or "UTC",
-        "AGENT": manifest.adapter,
-    }
-    for item in manifest.runtime.build_arguments:
-        values[item.name] = item.value
-    for raw in build_arguments:
-        name, separator, value = raw.partition("=")
-        if not separator or not _BUILD_ARG_NAME.fullmatch(name):
-            raise ConfigurationError(
-                f"Invalid build argument (expected NAME=VALUE): {raw}"
-            )
-        values[name] = value
-    for name, value in values.items():
-        args.extend(("--build-arg", f"{name}={value}"))
-    args.append(str(paths.root))
-    return tuple(args)
+    return build_runtime_image_argv(
+        paths,
+        manifest,
+        build_arguments=build_arguments,
+        engine=engine,
+    )
 
 
 def build_krun_build_argv(request: KrunRequest, *, engine: str = "podman") -> tuple[str, ...]:
-    """Build the same ASF agent image without depending on Dev Containers."""
+    """Return the final OCI image build command for a krun runtime."""
 
     return build_krun_image_argv(
         request.paths,
@@ -340,9 +321,7 @@ def build_krun_environment(
     for key, value in runtime_environment:
         environment[key] = value
 
-    # Runtime identity is framework-owned. A manifest or secret env file must
-    # not be able to make a krun guest look like a Dev Container.
-    environment.pop("DEVCONTAINER", None)
+    # Runtime identity is framework-owned.
     environment["ASF_AGENT"] = request.plan.runtime
     environment["ASF_ISOLATION"] = "microvm"
     environment["ASF_KRUN_CAPABILITIES"] = ",".join(
@@ -405,7 +384,6 @@ def build_krun_run_argv(
         "--userns=keep-id:uid=1000,gid=1000",
         "--user=1000:1000",
         "--workdir=/workspace",
-        "--unsetenv=DEVCONTAINER",
         # Podman otherwise copies proxy variables from its host environment
         # into the guest implicitly. ASF injects only the intended values.
         "--http-proxy=false",
@@ -491,7 +469,7 @@ def build_krun_run_argv(
         (
             krun_image_name(request.plan),
             "bash",
-            "/workspace/sandbox/.devcontainer/on-start.sh",
+            "/workspace/sandbox/containers/on-start.sh",
             *selected,
         )
     )

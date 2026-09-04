@@ -51,7 +51,8 @@ class VolumeRunner:
 def make_checkout(root: Path) -> RepoPaths:
     root.mkdir(parents=True)
     (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
+    (root / ".asf").mkdir()
     runtime_dir = root / "agents" / "demo"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "runtime.yml").write_text(

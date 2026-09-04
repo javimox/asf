@@ -32,126 +32,65 @@ class MaintenanceCommandTests(unittest.TestCase):
         self.output = io.StringIO()
         self.error = io.StringIO()
 
-    @mock.patch("asf.maintenance.shutil.which", return_value="/usr/bin/devcontainer")
     @mock.patch("asf.maintenance.run")
-    def test_build_uses_build_only_config_and_no_id_label(self, command, _which) -> None:
-        command.return_value = CommandResult(("devcontainer",), 0, "", "")
-        result = run_maintenance_command(
-            ("build", "claude"),
-            self.paths,
-            podman=AvailablePodman(),
-            output=self.output,
-            error=self.error,
-        )
-        self.assertEqual(result.returncode, 0)
-        argv = command.call_args.args[0]
-        self.assertEqual(argv[:2], ("devcontainer", "build"))
-        self.assertNotIn("--id-label", argv)
-        config = self.paths.session_artifact("claude", "devcontainer.json")
-        self.assertTrue(config.is_file())
-        self.assertIn("Done.", self.output.getvalue())
-
-    @mock.patch("asf.maintenance.shutil.which", return_value="/usr/bin/devcontainer")
-    @mock.patch("asf.maintenance.run")
-    def test_build_uses_only_the_selected_runtime_repositories(
-        self,
-        command,
-        _which,
-    ) -> None:
-        claude_repo = self.root.parent / "claude-project"
-        hermes_repo = self.root.parent / "hermes-project"
-        claude_repo.mkdir()
-        hermes_repo.mkdir()
-        (self.root / "agents" / "claude" / "repos.yml").write_text(
-            "repos:\n"
-            f"  - path: {claude_repo}\n"
-            "    mode: ro\n",
-            encoding="utf-8",
-        )
-        (self.root / "agents" / "hermes" / "repos.yml").write_text(
-            "repos:\n"
-            f"  - path: {hermes_repo}\n"
-            "    mode: rw\n",
-            encoding="utf-8",
-        )
-        command.return_value = CommandResult(("devcontainer",), 0, "", "")
-
-        result = run_maintenance_command(
-            ("build", "claude"),
-            self.paths,
-            podman=AvailablePodman(),
-            output=self.output,
-            error=self.error,
-        )
-
-        self.assertEqual(result.returncode, 0)
-        config_path = self.paths.session_artifact("claude", "devcontainer.json")
-        lines = config_path.read_text(encoding="utf-8").splitlines()
-        config = json.loads(
-            "\n".join(line for line in lines if not line.startswith("//"))
-        )
-        mounts = config["mounts"]
-        self.assertTrue(any(str(claude_repo) in mount for mount in mounts))
-        self.assertTrue(
-            any(
-                str(claude_repo) in mount and ",readonly" in mount
-                for mount in mounts
-            )
-        )
-        self.assertFalse(any(str(hermes_repo) in mount for mount in mounts))
-
-    @mock.patch("asf.maintenance.run")
-    def test_build_supports_krun_as_explicit_rebuild(self, command) -> None:
-        manifest = self.root / "agents" / "hermes" / "runtime.yml"
-        text = manifest.read_text(encoding="utf-8")
-        text = text.replace(
-            "  isolation: container  # container or microvm\n",
-            "  isolation: microvm  # container or microvm\n",
-            1,
-        )
-        manifest.write_text(text, encoding="utf-8")
+    def test_build_builds_shared_base_then_selected_runtime_image(self, command) -> None:
         command.return_value = CommandResult(("podman",), 0, "", "")
-
         result = run_maintenance_command(
-            ("build", "hermes"),
-            self.paths,
-            podman=AvailablePodman(),
-            output=self.output,
-            error=self.error,
+            ("build", "claude"), self.paths, podman=AvailablePodman(),
+            output=self.output, error=self.error,
         )
-
         self.assertEqual(result.returncode, 0)
-        argv = command.call_args.args[0]
-        self.assertEqual(argv[:2], ("podman", "build"))
-        self.assertIn("AGENT=hermes", argv)
-        self.assertTrue(argv[argv.index("--tag") + 1].endswith(":krun"))
+        self.assertEqual(command.call_count, 2)
+        base = command.call_args_list[0].args[0]
+        runtime = command.call_args_list[1].args[0]
+        self.assertEqual(base[:2], ("podman", "build"))
+        self.assertEqual(runtime[:2], ("podman", "build"))
+        self.assertIn(str(self.paths.containers_dir / "base" / "Containerfile"), base)
+        self.assertIn(str(self.paths.containers_dir / "claude" / "Containerfile"), runtime)
+        self.assertIn("ASF_BASE_IMAGE=localhost/" + self.paths.identity.prefix.lower() + "-base:runtime", runtime)
+        self.assertTrue(runtime[runtime.index("--tag") + 1].endswith("-claude:runtime"))
         self.assertIn("Done.", self.output.getvalue())
 
     @mock.patch("asf.maintenance.run")
-    def test_build_routed_krun_needs_no_subnet_allocation(self, command) -> None:
+    def test_build_microvm_uses_the_same_runtime_image_pipeline(self, command) -> None:
+        manifest = self.root / "agents" / "hermes" / "runtime.yml"
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8").replace(
+                "  isolation: container  # container or microvm\n",
+                "  isolation: microvm  # container or microvm\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        command.return_value = CommandResult(("podman",), 0, "", "")
+        result = run_maintenance_command(
+            ("build", "hermes"), self.paths, podman=AvailablePodman(),
+            output=self.output, error=self.error,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(command.call_count, 2)
+        runtime = command.call_args_list[1].args[0]
+        self.assertIn(str(self.paths.containers_dir / "hermes" / "Containerfile"), runtime)
+        self.assertTrue(runtime[runtime.index("--tag") + 1].endswith("-hermes:runtime"))
+
+    @mock.patch("asf.maintenance.run")
+    def test_build_routed_microvm_needs_no_subnet_allocation(self, command) -> None:
         manifest = self.root / "agents" / "routed-scanner" / "runtime.yml"
         self.assertIn("isolation: microvm", manifest.read_text(encoding="utf-8"))
         command.return_value = CommandResult(("podman",), 0, "", "")
-
         result = run_maintenance_command(
-            ("build", "routed-scanner"),
-            self.paths,
-            podman=AvailablePodman(),
-            output=self.output,
-            error=self.error,
+            ("build", "routed-scanner"), self.paths, podman=AvailablePodman(),
+            output=self.output, error=self.error,
         )
-
         self.assertEqual(result.returncode, 0)
-        argv = command.call_args.args[0]
-        self.assertEqual(argv[:2], ("podman", "build"))
-        self.assertIn("AGENT=generic", argv)
+        runtime = command.call_args_list[1].args[0]
+        self.assertIn(str(self.paths.containers_dir / "generic" / "Containerfile"), runtime)
         self.assertIn(
             self.paths.identity.session_key("routed-scanner").lower(),
-            argv[argv.index("--tag") + 1],
+            runtime[runtime.index("--tag") + 1],
         )
 
-    @mock.patch("asf.maintenance.shutil.which", return_value="/usr/bin/devcontainer")
-    def test_build_requires_exactly_one_runtime(self, _which) -> None:
+    def test_build_requires_exactly_one_runtime(self) -> None:
         result = run_maintenance_command(
             ("build",), self.paths, podman=AvailablePodman(),
             output=self.output, error=self.error,
@@ -159,37 +98,32 @@ class MaintenanceCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Usage", result.stderr)
 
-    @mock.patch("asf.maintenance.shutil.which", return_value="/usr/bin/devcontainer")
     @mock.patch("asf.maintenance.run")
     @mock.patch("asf.maintenance.SessionDiscovery")
     @mock.patch("asf.maintenance.load_runtime_plan")
     @mock.patch("asf.maintenance.validate_runtime_plan_context")
-    def test_scan_uses_fixed_command_and_configured_repository(
-        self, _validate, load_plan, discovery_class, command, _which
+    def test_scan_uses_podman_exec_and_configured_repository(
+        self, _validate, load_plan, discovery_class, command
     ) -> None:
-        plan = mock.Mock(session_label="asf.session=test-claude", runtime="claude")
+        plan = mock.Mock(session_label="asf.session=test-claude", runtime="claude", runtime_isolation="container")
         load_plan.return_value = plan
         discovery = discovery_class.from_paths.return_value
         discovery.extract_runtime_argument.return_value = ("claude", ("repo",))
         discovery.resolve_runtime.return_value = "claude"
         discovery.unique_match.return_value = mock.Mock(container_id="runtime")
         (self.root / "agents" / "claude" / "repos.yml").write_text(
-            "repos:\n"
-            f"- path: {self.root.parent / 'repo'}\n"
-            "  mode: rw\n",
+            "repos:\n" f"- path: {self.root.parent / 'repo'}\n" "  mode: rw\n",
             encoding="utf-8",
         )
         (self.root.parent / "repo").mkdir()
-        command.return_value = CommandResult(("devcontainer",), 0, "", "")
-
+        command.return_value = CommandResult(("podman",), 0, "", "")
         result = run_maintenance_command(
             ("scan", "repo", "claude"), self.paths,
             podman=AvailablePodman(), output=self.output, error=self.error,
         )
         self.assertEqual(result.returncode, 0)
         argv = command.call_args.args[0]
-        self.assertEqual(argv[0:2], ("devcontainer", "exec"))
-        self.assertIn("--id-label", argv)
+        self.assertEqual(argv[:3], ("podman", "exec", "runtime"))
         self.assertEqual(
             argv[-5:],
             ("semgrep", "scan", "--config", "auto", "/workspace/repos/repo"),

@@ -25,40 +25,15 @@ cat > "$TMP/bin/podman" <<'PODMAN'
 exec "${ASF_FAKE_PODMAN_SCRIPT:?}" "$@"
 PODMAN
 
-cat > "$TMP/bin/devcontainer" <<'DEVCONTAINER'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'devcontainer %s\n' "$*" >> "${MOCK_LOG:?}"
-case "${1:-}" in
-    up)
-        session="" previous=""
-        for argument in "$@"; do
-            if [[ "$previous" == --id-label && "$argument" == asf.session=* ]]; then
-                session=${argument#asf.session=}
-            fi
-            previous=$argument
-        done
-        [[ -z "$session" ]] || "${ASF_FAKE_PODMAN_SCRIPT:?}" __add-runtime "$session" >/dev/null
-        ;;
-    exec)
-        : > "${SESSION_STARTED:?}"
-        trap 'exit 129' HUP
-        trap 'exit 130' INT
-        trap 'exit 143' TERM
-        while :; do sleep 1; done
-        ;;
-    build) ;;
-    *) exit 2 ;;
-esac
-DEVCONTAINER
-chmod 755 "$TMP/bin/podman" "$TMP/bin/devcontainer"
+chmod 755 "$TMP/bin/podman"
 
 export MOCK_LOG="$TMP/commands.log"
 export ASF_FAKE_PODMAN_SCRIPT="$TMP/asf/tests/fake_podman_open.sh"
 export ASF_FAKE_PODMAN_STATE="$TMP/podman-state"
 export SESSION_STARTED="$TMP/session-started"
+export ASF_FAKE_RUNTIME_BLOCK=true
 export ASF_STOP_VERIFY_ATTEMPTS=1 ASF_STOP_VERIFY_DELAY=0 ASF_SHUTDOWN_TIMEOUT=0
-export ASF_EXPECT_RUNTIME_PLAN="$TMP/asf/.devcontainer/sessions/claude/runtime-plan.json"
+export ASF_EXPECT_RUNTIME_PLAN="$TMP/asf/.asf/sessions/claude/runtime-plan.json"
 : > "$MOCK_LOG"
 
 (
@@ -94,7 +69,7 @@ assert [item["role"] for item in plan["support_containers"]] == ["proxy"]
 assert plan["runtime_container"]["name"].endswith("-claude")
 PY
 
-lock="$TMP/asf/.devcontainer/.open-lock-claude/pid"
+lock="$TMP/asf/.asf/.open-lock-claude/pid"
 [[ -f "$lock" ]]
 [[ "$(tr -d '\n' < "$lock")" == "$OPEN_PID" ]] || {
     echo "open lock PID changed across the Bash-to-Python exec" >&2
@@ -118,7 +93,7 @@ if grep -q 'Agent session exited with status' "$TMP/open.err"; then
     echo "signal exit was misreported as an agent failure" >&2
     exit 1
 fi
-[[ ! -e "$TMP/asf/.devcontainer/.open-lock-claude" ]]
+[[ ! -e "$TMP/asf/.asf/.open-lock-claude" ]]
 [[ ! -f "$ASF_FAKE_PODMAN_STATE/runtime_exists" ]]
 for role in proxy broker routed-gateway routed-init; do
     [[ ! -f "$ASF_FAKE_PODMAN_STATE/${role}_exists" ]]

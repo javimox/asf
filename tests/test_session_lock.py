@@ -23,7 +23,8 @@ class SessionLockManagerTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         self.identity = ResourceIdentity.from_physical_path(self.root)
         self.live: set[int] = set()
         self.manager = SessionLockManager(
@@ -80,11 +81,11 @@ class SessionLockManagerTests(unittest.TestCase):
         self.assertFalse(tuple(path.parent.glob(f"{path.name}.stale-*")))
         self.manager.release(lock)
 
-    def test_symlinked_devcontainer_directory_is_rejected(self) -> None:
-        external = self.root / "external-devcontainer"
+    def test_symlinked_runtime_state_directory_is_rejected(self) -> None:
+        external = self.root / "external-runtime-state"
         external.mkdir()
-        (self.root / ".devcontainer").rmdir()
-        (self.root / ".devcontainer").symlink_to(
+        (self.root / ".asf").rmdir()
+        (self.root / ".asf").symlink_to(
             external, target_is_directory=True
         )
 
@@ -216,7 +217,8 @@ class ClaimGraceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         self.identity = ResourceIdentity.from_physical_path(self.root)
         self.manager = SessionLockManager(
             self.identity,

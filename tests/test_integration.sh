@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Integration test — REAL podman + devcontainer, network required, Linux only.
+# Integration test — real Podman, network required, Linux only.
 #
-# Gated: runs only when ASF_INTEGRATION=1 and podman + devcontainer exist;
+# Gated: runs only when ASF_INTEGRATION=1 and Podman exist;
 # skips (exit 0) otherwise, so ./tests/run.sh stays fast by default.
 #
 # Uses a DUMMY provider key: asf.conf gets an explicit model list, so the
@@ -25,7 +25,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
     echo "test_integration.sh: skipped (Linux only)" >&2
     exit 0
 fi
-for tool in podman devcontainer python3; do
+for tool in podman python3; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "test_integration.sh: skipped ($tool not found)" >&2
         exit 0
@@ -44,7 +44,7 @@ trap cleanup EXIT
 
 cp -a "$ROOT/." "$TMP/asf"
 cd "$TMP/asf"
-rm -rf .devcontainer/.open-lock-*
+rm -rf .asf/.open-lock-*
 RESOURCE_PREFIX=$(PYTHONPATH="$PWD" python3 -c 'from asf.paths import RepoPaths; print(RepoPaths.for_root(".").identity.prefix, end="")')
 
 # Broker on, explicit model list (no discovery), dummy key.
@@ -69,11 +69,9 @@ print(value)
 PYDOMAIN
 )
 
-# The devcontainer CLI does not forward this script's stdin to
-# `devcontainer exec ... zsh`.  A heredoc therefore makes zsh see EOF and exit
-# without running any checks.  Exercise the real ASF service-runtime path
-# instead: write a test-only command into the copied checkout, switch only the
-# copied Claude manifest to service mode, and capture its normal stdout.
+# Exercise the real ASF service-runtime path: write a test-only command into
+# the copied checkout, switch only the copied Claude manifest to service mode,
+# and capture its normal stdout.
 CHECK_SCRIPT="$TMP/asf/tests/integration-session-checks.sh"
 cat > "$CHECK_SCRIPT" <<CHECKS
 #!/usr/bin/env bash

@@ -66,7 +66,6 @@ cat > "$TMP/asf/tests/runtime-krun-proxy-checks.sh" <<EOF_CHECKS
 set -euo pipefail
 
 test "\${ASF_ISOLATION:-}" = microvm
-test -z "\${DEVCONTAINER+x}"
 test "\$(id -u)" -eq 1000
 test "\$(id -g)" -eq 1000
 test -n "\${ASF_PROXY:-}"

@@ -290,7 +290,7 @@ class SecurityTestContractTests(unittest.TestCase):
         self.checkout = self.base / "checkout"
         self.checkout.mkdir()
         (self.checkout / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
-        (self.checkout / ".devcontainer").mkdir()
+        (self.checkout / "containers").mkdir()
         (self.checkout / "agents").mkdir()
         (self.checkout / "secrets").mkdir()
         shutil.copy2(ROOT / "asf.conf", self.checkout / "asf.conf")

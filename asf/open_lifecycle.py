@@ -315,7 +315,7 @@ def run_open_session(
     except OpenLifecycleError as exc:
         process_error = exc
     finally:
-        # A raw or interrupted devcontainer TTY must be usable before cleanup
+        # A raw or interrupted interactive TTY must be usable before cleanup
         # emits diagnostics or waits on Podman.
         restore_terminal(errors)
 
@@ -345,7 +345,7 @@ def run_open_session(
                     return exc.exit_code
                 output.write(
                     f"\n{_YELLOW}Detached from {runtime}; the krun microVM is still running.{_RESET}\n"
-                    f"  Reattach: ./sandbox.sh shell {runtime}\n"
+                    f"  Open a shell: ./sandbox.sh shell {runtime}\n"
                     f"  Stop:     ./sandbox.sh stop {runtime}\n"
                 )
                 output.flush()

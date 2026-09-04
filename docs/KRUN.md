@@ -217,6 +217,11 @@ defense in depth rather than an ASF policy boundary.
 
 ## Interactive lifecycle
 
+For container isolation, ASF starts a detached Podman container and runs
+bootstrap/workload commands through `podman exec`. For krun microVM isolation,
+ASF uses the microVM console/attach path because the krun handler does not
+support OCI exec.
+
 Start:
 
 ```bash
@@ -231,7 +236,7 @@ Detach without stopping:
 Ctrl-P, Ctrl-Q
 ```
 
-Reattach:
+Open the console again:
 
 ```bash
 ./sandbox.sh shell <agent>

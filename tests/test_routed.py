@@ -336,7 +336,8 @@ class ScriptedRunner:
 class LifecycleTests(RoutedFixture):
     def checkout(self, root: Path) -> Path:
         (root / "agents").mkdir(parents=True)
-        (root / ".devcontainer").mkdir()
+        (root / "containers").mkdir()
+        (root / ".asf").mkdir()
         (root / "secrets").mkdir()
         (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
         return root

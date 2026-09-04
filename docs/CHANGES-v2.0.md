@@ -91,16 +91,6 @@ sessions/<agent>/
 - LiteLLM receives `ASF_SESSION_ID` instead of
   `ASF_OBSERVATION_SESSION_ID`.
 
-### Stale state on existing hosts
-
-ASF 2.0 ignores old `evidence/`, `observability/`, and `egress-current.json`
-state. It may be removed after upgrading:
-
-```bash
-rm -rf .devcontainer/sessions/*/evidence .devcontainer/sessions/*/observability
-rm -f  .devcontainer/sessions/*/egress-current.json
-```
-
 ## 3. `observe` hardening
 
 - Every field printed from `events.jsonl` or `broker-requests.jsonl` is escaped
@@ -121,9 +111,8 @@ Removed from the supported `main` tree:
 - `tools/diagnostics/`;
 - `tools/allocate_subnets.py`, the compatibility shim for
   `asf.routed_allocation`;
-- per-module command-line wrappers in `broker.py`, `devcontainer.py`,
-  `runtime_plan.py`, `open_lifecycle.py`, and `routed_allocation.py` that were
-  only needed by the former Bash implementation.
+- per-module command-line wrappers that were only needed by the former Bash
+  implementation.
 
 `python3 -m asf.manifest` and `asf.proxy` retain their supported command-line
 interfaces.

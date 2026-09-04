@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# on-start.sh — postStartCommand, runs before the shell is handed to the user.
-# waitFor: postStartCommand in devcontainer.json means nothing is accessible until this exits.
-# We exit non-zero on critical failure — devcontainer up will surface it.
+# on-start.sh — runtime bootstrap, runs before the shell is handed to the user.
+# We exit non-zero on critical failure so ASF aborts startup fail closed.
 #
 # Order:
 #   1. Secrets   — verify host secret files are hidden by an empty tmpfs
@@ -139,8 +138,7 @@ fi
 
 # ── 4. Agent setup ────────────────────────────────────────────────────────────
 # Each runtime owns its setup.sh (policy injection, hook registration, etc.).
-# ASF_AGENT is injected as containerEnv. The Docker build ARG named AGENT is
-# build-time only and is intentionally not expected at runtime.
+# ASF_AGENT is injected by the host runtime and identifies the selected manifest.
 RUNTIME_NAME="${ASF_AGENT:?ASF_AGENT is required but was not injected}"
 AGENT_SETUP="/workspace/sandbox/agents/${RUNTIME_NAME}/setup.sh"
 
@@ -181,14 +179,14 @@ fi
 
 echo ""
 if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
-    echo "  Git: commit in here — repos are bind mounts, so commits land on the"
-    echo "       host. Review and push from the host:  git log -p && git push"
+    echo "  Git: repositories are writable bind mounts, including .git metadata."
+    echo "       Treat host-side Git commands as untrusted until you review the repo."
+    echo "       Commit from this sandbox shell; push only after deliberate review."
     echo ""
 fi
 
-# krun runs this script as the initial workload setup rather than as a Dev
-# Container postStartCommand. In that mode, hand control directly to the
-# requested agent/service process after all fail-closed checks have passed.
+# MicroVM sessions run this bootstrap as their initial workload. Hand control
+# directly to the requested agent/service process after all checks pass.
 if (( $# > 0 )); then
     exec "$@"
 fi

@@ -23,8 +23,6 @@ implementation material lives here.
   network topology
 - [Egress design](EGRESS-DESIGN.md) — Caddy policy, verification, and outbound
   traffic controls
-- [Dev Container integration](DEVCONTAINER.md) — how the default ASF backend
-  uses the Dev Container CLI with Podman
 - [microVM isolation](KRUN.md) — optional KVM isolation for the agent workload (krun backend)
 - [observability](OBSERVABILITY.md) — host-side session, LLM, privilege, and routed PCAP evidence
 - [Dependencies](DEPENDENCIES.md) — pinned dependencies and SBOM scope

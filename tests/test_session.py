@@ -254,7 +254,8 @@ class Fixture(unittest.TestCase):
         root = Path(self.temporary.name) / "checkout"
         root.mkdir()
         (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
-        (root / ".devcontainer").mkdir()
+        (root / "containers").mkdir()
+        (root / ".asf").mkdir()
         for runtime in ("claude", "hermes"):
             directory = root / "agents" / runtime
             directory.mkdir(parents=True)

@@ -96,7 +96,8 @@ class CaptureCommandTests(unittest.TestCase):
         root = Path(self.temporary.name) / "asf"
         root.mkdir()
         (root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
-        (root / ".devcontainer").mkdir()
+        (root / "containers").mkdir()
+        (root / ".asf").mkdir()
         runtime = root / "agents" / "routed-scanner"
         runtime.mkdir(parents=True)
         (runtime / "runtime.yml").write_text("name: routed-scanner\n", encoding="utf-8")

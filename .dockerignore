@@ -15,12 +15,9 @@ agents/*/repos.yml
 
 # ASF runtime state
 persistent/
-.devcontainer/sessions/
-.devcontainer/devcontainer.json
-.devcontainer/.firewall-hash
-.devcontainer/.current-agent
-.devcontainer/.broker-host-*
-.devcontainer/.open-lock-*
+.asf/sessions/
+.asf/.broker-host-*
+.asf/.open-lock-*
 
 # Python state
 __pycache__/

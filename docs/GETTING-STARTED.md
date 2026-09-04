@@ -11,7 +11,7 @@ ownership, agent selection, Git workflow, and useful local notes.
 ```
 ./sandbox.sh open <agent>      start one agent runtime
                                (removes ephemeral containers automatically on exit)
-./sandbox.sh shell [agent]     attach to an already-running container
+./sandbox.sh shell [agent]     open a shell in an already-running runtime
 ./sandbox.sh ls                show running and deployed agent sessions
 ./sandbox.sh observe [agent]   show host-side session and privilege state
 ./sandbox.sh capture start [agent]
@@ -64,23 +64,12 @@ mapping. The `podman` package sets these up for your user on install. Verify:
 ```bash
 grep "$(id -un)" /etc/subuid /etc/subgid    # should print a range for your user
 ```
-### devcontainer CLI (default container backend)
+### microVM isolation (optional)
 
-Install it as normal (unprivileged) user:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/devcontainers/cli/main/scripts/install.sh | sh
-```
-
-Or using npm:
-```bash
-npm install -g @devcontainers/cli
-```
-
-The optional `runtime.isolation: microvm` backend does not use the Dev Container
-CLI. It requires a Linux host with KVM plus krun/libkrun instead. Routed microVM
-mode also needs the local TAP-capable runtime built once with
+`runtime.isolation: microvm` requires a Linux host with KVM plus krun/libkrun.
+Routed microVM mode also needs the local TAP-capable runtime built once with
 `tools/krun-runtime/build.sh`. See [microVM isolation](KRUN.md) for details.
+
 ### Python 3
 
 ASF uses Python for all host-side orchestration, deterministic configuration
@@ -92,17 +81,16 @@ python3 --version
 python3 -c 'import yaml'
 ```
 
-ASF uses one Python production path for every command and network mode.
-
-The default backend drives the devcontainer CLI with `--docker-path podman`, so
-it uses Podman everywhere with no Docker installed. The krun backend calls Podman
-directly and likewise does not require Docker.
+ASF uses one Python production path for every command and network mode. ASF
+drives rootless Podman directly for both container and microVM isolation; Docker
+is not required.
 ### Pinned build dependencies
 
-Top-level image, agent, and tool versions live in `asf.conf`. ASF passes
-them into the generated devcontainer build arguments. The LiteLLM image is pinned
-separately in `asf.conf`. Update those files deliberately and run the tests; do
-not replace exact versions with `latest` or moving branch tags.
+Top-level image, agent, and tool versions live in `asf.conf`. ASF passes the
+relevant pins to the shared base image and thin per-agent runtime images. The
+LiteLLM image is pinned separately in `asf.conf`. Update those values
+deliberately and run the tests; do not replace exact versions with `latest` or
+moving branch tags.
 
 ## Repository access
 
@@ -124,30 +112,37 @@ agent.
 
 ## File ownership: how it works
 
-The container runs as the unprivileged **`node`** user. Podman's
-`--userns=keep-id` (auto-injected by the devcontainer CLI for Podman) maps your
-host user into the container; because `node` is UID 1000 and most Linux host
-accounts are too, this maps host -> node with no extra flag. The result:
+The runtime runs as the unprivileged **`node`** user (UID/GID 1000). ASF
+starts Podman with `--userns=keep-id:uid=1000,gid=1000` and
+`--user=1000:1000`, mapping the invoking host user to `node` inside the runtime.
+The result:
 
-| | Inside container | On host |
-|---|------------------|---------|
-| Files Agent creates | owned by `node` | owned by **you** |
+| | Inside runtime | On host |
+|---|----------------|---------|
+| Files the agent creates | owned by `node` | owned by **you** |
 
-So files are directly editable on the host, owned by `node` in the container,
-and the container never holds host root. This is the one clean configuration
-that satisfies all three at once — and it's why the sandbox uses Podman rather
-than Docker (Docker has no per-container `keep-id` equivalent in rootless mode).
+Repository files therefore remain directly editable on the host while the
+runtime stays non-root. The `1000` values identify the fixed `node` user inside
+the image; Podman's keep-id mapping handles the host-side UID/GID mapping.
 
-The `1000` in the `keep-id` mapping is the `node` user's fixed UID in the image,
-not your host UID — so this works regardless of what UID your host account has.
+## Editor workflow
 
-**Note on `--userns`:** the devcontainer CLI auto-injects `--userns=keep-id` for
-the default container backend. The krun backend sets
-`--userns=keep-id:uid=1000,gid=1000` explicitly. Since
-`node` is UID 1000 and most Linux host accounts are also 1000, this maps
-host→node correctly with no extra flag. **If your host UID is not 1000**, add
-`"--userns=keep-id:uid=1000,gid=1000"` to `runArgs` in `devcontainer.base.json`
-so files stay owned by you. (Check with `id -u` on the host.)
+Open the repository normally on the host with your editor. ASF bind-mounts that
+same directory into the runtime at `/workspace/repos/<name>`; there is no copy
+or synchronization step. Saving a file in VS Code therefore makes the change
+immediately visible inside the sandbox.
+
+For commands that should run inside the sandbox, open a VS Code integrated
+terminal and enter the already-running ASF runtime:
+
+```bash
+./sandbox.sh shell claude
+cd /workspace/repos/my-api
+```
+
+Editing stays local and fast; builds, tests, Git inspection, and agent commands
+can run from the sandbox shell under ASF's filesystem, network, credential, and
+isolation policy.
 
 ## Choosing an agent
 
@@ -157,16 +152,14 @@ so files stay owned by you. (Check with `id -u` on the host.)
 ./sandbox.sh open hermes    # Hermes agent
 ```
 
-Each agent has its **own image**. Opening `claude` builds and runs an image that
-contains only Claude Code — it never runs the Hermes installer (which is slow).
-Opening `hermes` or `codex` builds a separate image containing only that agent.
-The agent images share the common tooling layers (git, zsh, uv, etc.) from the
-build cache, so the first build of each agent is the only slow one; switching
-back to an already-built agent is fast.
+ASF builds a shared **`asf-base`** image with common tooling (git, zsh, uv,
+Semgrep, and related utilities), then a thin runtime image for each adapter. The
+Claude image installs Claude Code, Codex installs Codex CLI, Hermes owns its
+Hermes/Tirith-specific installation, and generic runtimes add no agent product.
 
-Agent selection is injected as a Docker build arg (`AGENT`), which gives each
-agent a distinct image. Policy files for the active agent are injected at every
-container start from `agents/<agent>/`.
+This keeps agent-specific installation out of the common image while preserving
+shared build layers. Runtime policy remains separate and is applied from
+`agents/<agent>/` when the session starts.
 
 To pre-build an agent without starting a session:
 
@@ -183,8 +176,8 @@ lifecycle and security policy, use `run`:
 
 `run` starts a fresh session using the runtime's configured isolation backend,
 executes the command as an argv vector, and performs the normal ASF cleanup when
-it exits. With `container` isolation it uses the Dev Container execution path;
-with `microvm` isolation the command becomes the krun guest's initial foreground
+it exits. With `container` isolation ASF executes it through Podman; with
+`microvm` isolation the command becomes the krun guest's initial foreground
 workload after the normal startup checks. It does not pipe a shell command
 through the interactive `open` path.
 
@@ -212,31 +205,31 @@ stored by Codex in `config.toml`; the next open recreates an empty private
 `CODEX_HOME`. The supplied proxy policy permits only `auth.openai.com` for
 authentication/token refresh and `chatgpt.com` for the Codex service.
 
-## Git workflow: commit inside, push outside
+## Git workflow
 
-**No SSH credentials enter the container by default.** Repositories are bind
-mounts, so a `git commit` made by the agent lands directly in the host
-repository. You review it and push yourself:
+**No SSH credentials enter the runtime by default.** Repositories are bind
+mounts, so a `git commit` made inside the sandbox lands directly in the host
+repository:
 
 ```bash
-# inside the container — the agent works and commits
-git add src/thing.ts && git commit -m "..."
-
-# on the host — you review, then you push
-git -C ~/projects/my-project log -p
-git -C ~/projects/my-project push
+# inside the sandbox — work, inspect, and commit
+git diff
+git add src/thing.ts
+git commit -m "..."
 ```
 
-Under this project's threat model (the agent is not trusted) this is the
-correct default: the agent's output passes a human before it can reach a
-remote, and there is no credential in the container to misuse or exfiltrate.
+An `rw` repository also exposes its `.git` metadata to the sandbox. Treat that
+metadata as untrusted after an agent session: do not assume that running Git
+against the same checkout on the host is a safe review boundary. Review the
+repository deliberately before host-side Git operations. See
+[SECURITY-MODEL.md](SECURITY-MODEL.md#repository-metadata-and-host-git).
 ### Opt-in: SSH agent forwarding for automation
 
 When you want the agent to push unattended, forwarding is available — but it
 must be enabled explicitly and pointed at a dedicated agent.
 
 Agent forwarding does **not** leak private key material; the SSH agent protocol
-is a signing oracle. But while the socket is live, the container can sign with
+is a signing oracle. But while the socket is live, the runtime can sign with
 **every identity the agent holds**, for the whole session. That means push
 access to every repository those keys reach, plus authentication to any host
 allowed on port 22. Forwarding your desktop or GNOME Keyring agent hands the
@@ -308,10 +301,10 @@ or hooks for safety is a human task (or a separate Claude session).
   container names include a hash of that path, so **moving or renaming the
   directory starts fresh state** — stop sessions first, and expect new (empty)
   agent volumes afterwards
-- `.devcontainer/sessions/<agent>/devcontainer.json` files are auto-generated — never edit them by hand
+- Generated runtime state lives under `.asf/` and should not be edited by hand
 - `open` recreates that agent's container each time, so mount changes take
   effect immediately, and removes it on exit so nothing lingers
-- `shell` attaches to a running container without recreating it
+- `shell` opens a shell in a running runtime without recreating it
 - Persistent-volume names include a hash of the canonical checkout path, so two
   ASF clones with the same directory basename remain isolated.
 - Two repositories with the same basename cannot be assigned to the same agent
