@@ -88,6 +88,26 @@ from the host kernel, while the host-side VMM remains subject to the surrounding
 Podman controls. Seccomp is defense in depth, not an authoritative ASF policy
 boundary. See [KRUN.md](KRUN.md) for the microVM-specific boundary.
 
+## Repository metadata and host Git
+
+A repository mounted `rw` is writable in full, including its `.git` directory.
+An untrusted agent can therefore modify Git configuration, hooks, remotes, and
+other repository metadata that may influence later Git commands on the host.
+Do not treat host-side `git log`, `git diff`, `git push`, or similar commands as
+a security boundary after an untrusted session. Review the repository before
+executing host Git commands. Protecting `.git` while keeping the working tree
+writable is tracked as a known security limitation.
+
+## Runtime credentials
+
+Values loaded from ASF secret files are injected only into workload `podman exec`
+processes for container isolation; they are not stored in the container config
+and their values are not placed in argv. The LiteLLM broker session token is a
+deliberate exception: it is session-scoped and is persisted in the runtime
+container environment so later shell processes can authenticate to that session's
+broker without persisting a reusable provider credential. Provider API keys
+remain outside the brokered agent runtime.
+
 ## Hermes-specific hardening
 
 `./sandbox.sh open hermes` applies these automatically:
@@ -206,8 +226,12 @@ Documented gaps, not oversights. Each is a deliberate trade-off:
   web traffic, but does not remove it.
 - **IPs are resolved once at container start.** CDN rotation during long
   sessions can break allowlisted services until the container is restarted.
-- **Secrets are visible in host argv during a session.** `devcontainer exec
-  --remote-env KEY=value` places values in the host-side command line, and
-  `/proc/*/cmdline` is world-readable on Linux. On a single-user host this is
-  harmless; on shared hosts, enable the LiteLLM broker (the reusable provider
-  key then never appears in argv — only session-scoped values do).
+- **Runtime environment confidentiality is still host-scoped.** In container
+  isolation values loaded from ASF secret files are supplied only to workload
+  and shell `podman exec` processes: ASF passes `--env NAME` and provides the
+  value through the Podman process environment, so those values are neither in
+  the generated command line nor the persistent container configuration.
+  microVM launch uses the same name-only Podman boundary for the guest
+  environment. The same host user or root can still inspect process state. The
+  LiteLLM broker additionally keeps the reusable provider credential out of the
+  agent workload.

@@ -54,7 +54,8 @@ class ResidueScannerTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         (self.root / "agents" / "claude").mkdir(parents=True)
         (self.root / "agents" / "claude" / "runtime.yml").write_text(
             "name: claude\n"

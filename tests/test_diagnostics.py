@@ -24,7 +24,8 @@ from asf.process import CommandResult
 
 def make_checkout(root: Path) -> RepoPaths:
     (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
+    (root / ".asf").mkdir()
     agents = root / "agents"
     for runtime in ("claude", "hermes"):
         directory = agents / runtime

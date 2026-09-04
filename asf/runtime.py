@@ -1,20 +1,22 @@
-"""Runtime opening and shell attachment for every supported network mode.
+"""Runtime opening and shell access for every supported network mode.
 
 This module only sequences existing focused components: planning, allocation,
-network creation, broker, proxy, routed gateway, Dev Container rendering,
+network creation, broker, proxy, routed gateway, direct Podman runtime startup,
 verification, supervision, and cleanup.
 """
 from __future__ import annotations
 
 import contextlib
+import io
 import os
 import re
-import shutil
 import signal
 import stat
+import tempfile
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, NamedTuple, NoReturn, Sequence, TextIO
 
 from .broker import (
@@ -25,7 +27,6 @@ from .broker import (
     provider_api_key_name,
 )
 from .config import AsfConfig
-from .devcontainer import DevcontainerRequest, build_devcontainer_config, write_atomic
 from .egress_evidence import (
     EgressEvidenceError,
     finalize_egress_session,
@@ -35,10 +36,8 @@ from .errors import AsfError, ConfigurationError, InfrastructureError, Validatio
 from .manifest import load_model
 from .krun import (
     KrunRequest,
-    build_krun_build_argv,
     build_krun_environment,
     build_krun_run_argv,
-    krun_image_name,
     require_krun_host,
     validate_krun_beta,
 )
@@ -59,6 +58,16 @@ from .process import replace as replace_process_command
 from .process import run_streaming
 from .proxy import PROXY_PORT, ProxyRequest, ProxyService
 from .repositories import RepositoryEntry, RepositoryStore
+from .runtime_container import (
+    ContainerRequest,
+    build_container_environment,
+    build_container_exec_argv,
+    build_container_run_argv,
+)
+from .runtime_image import (
+    build_base_image_argv,
+    build_runtime_image_argv,
+)
 from .routed import RoutedRequest, RoutedService
 from .routed_allocation import RoutedAllocator
 from .runtime_plan import (
@@ -100,7 +109,7 @@ _RED = "\033[0;31m"
 _DIM = "\033[2m"
 _RESET = "\033[0m"
 _ENV_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-ReplaceProcess = Callable[[Sequence[str]], NoReturn]
+ReplaceProcess = Callable[..., NoReturn]
 
 
 class RuntimeOpenError(InfrastructureError):
@@ -167,7 +176,7 @@ class RuntimeService:
             if existing is not None and existing.container.is_running:
                 raise RuntimeOpenError(
                     f"A {runtime} session is already running.\n"
-                    f"  Attach to it: ./sandbox.sh shell {runtime}"
+                    f"  Open a shell: ./sandbox.sh shell {runtime}"
                 )
         lock_manager = discovery.lock_manager()
         previous = lock_manager.inspect(runtime)
@@ -175,7 +184,7 @@ class RuntimeService:
             lock_manager.acquire(runtime, owner_pid=owner_pid)
         except SessionAlreadyRunningError as exc:
             owner = "unknown" if exc.pid is None else str(exc.pid)
-            hint = f"  Attach to it: ./sandbox.sh shell {runtime}"
+            hint = f"  Open a shell: ./sandbox.sh shell {runtime}"
             raise RuntimeOpenError(
                 f"A {runtime} session (PID {owner}) is already running.\n{hint}"
             ) from exc
@@ -227,10 +236,9 @@ class RuntimeService:
                         manifest, config, plan, support, command=command_override
                     )
                 else:
-                    child = self._prepare_container(
+                    child, session_environment = self._prepare_container(
                         manifest, config, plan, support, command=command_override
                     )
-                    session_environment = None
                 if command_override is not None:
                     self.output.write(
                         f"  {_DIM}running one-shot command: "
@@ -409,8 +417,7 @@ class RuntimeService:
         self._ensure_krun_image(krun_request)
         remote_environment = self._runtime_environment(manifest, plan, support)
         # krun sessions pass their complete environment to the initial
-        # foreground Podman process; container sessions already hold broker
-        # credentials after `devcontainer up`.
+        # foreground Podman/VMM process.
         session_environment = build_krun_environment(
             krun_request,
             broker_token=(support.token.reveal() if support.token is not None else ""),
@@ -438,22 +445,48 @@ class RuntimeService:
         support: _SupportServices,
         *,
         command: Sequence[str] | None = None,
-    ) -> Sequence[str]:
-        """Generate and start the Dev Container; return the exec command."""
+    ) -> tuple[Sequence[str], dict[str, str]]:
+        """Build/start the container and return its workload exec boundary."""
 
-        self._generate_devcontainer(plan, manifest, config, support.broker)
-        environment = {}
-        if support.token is not None:
-            environment["ASF_BROKER_TOKEN"] = support.token.reveal()
-        self.output.write(f"{_BLUE}Starting container...{_RESET}\n")
-        self.output.write(
-            f"  {_DIM}(first run builds the image — takes ~1 min; "
-            f"subsequent runs are fast){_RESET}\n\n"
+        request = ContainerRequest(
+            self.paths,
+            plan,
+            manifest,
+            repositories=self._load_repositories(manifest),
+            run_arguments=config.hardening_arguments(manifest),
+            ssh_agent_socket=config.ssh_agent_socket(),
+            proxy_port=PROXY_PORT,
+            broker_default_model=(
+                support.broker.models.default_model
+                if support.broker is not None
+                else ""
+            ),
         )
-        self._start_devcontainer(plan, environment)
-        remote_environment = self._runtime_environment(manifest, plan, support)
-        return self._devcontainer_exec_argv(
-            plan, remote_environment, command=command
+        if request.ssh_agent_socket is not None:
+            self.error.write(
+                f"  {_YELLOW}⚠ SSH agent forwarding ENABLED{_RESET} "
+                f"{_DIM}({request.ssh_agent_socket}){_RESET}\n"
+                f"    {_DIM}every identity this agent holds is usable by the "
+                f"container for the whole session{_RESET}\n"
+            )
+        self._build_runtime_image(manifest, config)
+        runtime_environment = self._runtime_environment(manifest, plan, support)
+        environment = build_container_environment(
+            request,
+            broker_token=(support.token.reveal() if support.token is not None else ""),
+        )
+        self._start_container(request, environment)
+        interactive = command is None and plan.runtime_mode == "interactive"
+        workload_environment = dict(runtime_environment)
+        return (
+            build_container_exec_argv(
+                request,
+                command=command,
+                environment_names=tuple(workload_environment),
+                interactive=interactive,
+                engine=os.fspath(self.podman.engine),
+            ),
+            workload_environment,
         )
 
     def _build_and_create_plan(
@@ -553,20 +586,32 @@ class RuntimeService:
         if plan.runtime_isolation == "microvm":
             return self._attach_krun(runtime, match.container_id)
         self._require_tools()
+        config = AsfConfig.load(self.paths.config_file)
+        request = ContainerRequest(
+            self.paths,
+            plan,
+            manifest,
+            run_arguments=config.hardening_arguments(manifest),
+        )
         broker_active = plan.container(SessionRole.BROKER) is not None
         excluded = provider_api_key_name(manifest) if broker_active else ""
-        remote_environment = load_runtime_environment(
-            plan,
-            excluded_key=excluded,
-            output=self.output,
-            error=self.error,
+        runtime_environment = dict(
+            load_runtime_environment(
+                plan,
+                excluded_key=excluded,
+                output=self.output,
+                error=self.error,
+            )
         )
         replace_process(
-            self._devcontainer_exec_argv(
-                plan,
-                remote_environment,
+            build_container_exec_argv(
+                request,
                 command=("zsh",),
-            )
+                environment_names=tuple(runtime_environment),
+                interactive=True,
+                engine=os.fspath(self.podman.engine),
+            ),
+            env=runtime_environment,
         )
         raise AssertionError("replace_process returned")
 
@@ -579,14 +624,14 @@ class RuntimeService:
         except SessionAlreadyRunningError as exc:
             owner = "unknown" if exc.pid is None else str(exc.pid)
             raise RuntimeOpenError(
-                f"The {runtime} krun session is already attached by PID {owner}.\n"
+                f"The {runtime} krun console is already in use by PID {owner}.\n"
                 "  Detach that client first with Ctrl-P, Ctrl-Q."
             ) from exc
 
         self.output.write(
-            f"{_BLUE}Attaching to krun microVM...{_RESET}\n"
+            f"{_BLUE}Opening krun microVM console...{_RESET}\n"
             f"  {_DIM}Detach without stopping: Ctrl-P, Ctrl-Q{_RESET}\n"
-            f"  {_DIM}Press Enter if the prompt is not visible after attach.{_RESET}\n\n"
+            f"  {_DIM}Press Enter if the prompt is not visible.{_RESET}\n\n"
         )
         self.output.flush()
         command = (
@@ -606,7 +651,7 @@ class RuntimeService:
             if self._runtime_container_running(container_id):
                 self.output.write(
                     f"\n{_YELLOW}Detached from {runtime}; the krun microVM is still running.{_RESET}\n"
-                    f"  Reattach: ./sandbox.sh shell {runtime}\n"
+                    f"  Open a shell: ./sandbox.sh shell {runtime}\n"
                     f"  Stop:     ./sandbox.sh stop {runtime}\n"
                 )
                 self.output.flush()
@@ -718,14 +763,6 @@ class RuntimeService:
             )
             require_krun_host(self.paths, manifest)
             return
-        self._require_devcontainer()
-
-    def _require_devcontainer(self) -> None:
-        if shutil.which("devcontainer") is None:
-            raise RuntimeOpenError(
-                "devcontainer CLI not found. Install: "
-                "npm install -g @devcontainers/cli"
-            )
 
     def _load_repositories(
         self, manifest: RuntimeManifest
@@ -754,144 +791,105 @@ class RuntimeService:
             )
         return tuple(repositories)
 
-    def _ensure_krun_image(self, request: KrunRequest) -> None:
-        image = krun_image_name(request.plan)
+    def _build_runtime_image(
+        self, manifest: RuntimeManifest, config: AsfConfig
+    ) -> None:
+        self.output.write(f"{_BLUE}Preparing {manifest.name} runtime image...{_RESET}\n")
         started = time.monotonic()
-        result = self.podman.observe(
-            (os.fspath(self.podman.engine), "image", "exists", image)
-        )
-        if result.returncode == 0:
-            self.output.write(
-                f"{_GREEN}✓ Krun agent image available{_RESET} "
-                f"{_DIM}(cached; {time.monotonic() - started:.1f}s){_RESET}\n"
-            )
-            return
-        if result.returncode != 1:
-            raise RuntimeOpenError(
-                f"could not determine whether krun agent image exists: {image}"
-            )
-        self._build_krun_image(request)
-
-    def _build_krun_image(self, request: KrunRequest) -> None:
-        self.output.write(f"{_BLUE}Building krun agent image...{_RESET}\n")
-        started = time.monotonic()
-        try:
-            run_streaming(
-                build_krun_build_argv(
-                    request, engine=os.fspath(self.podman.engine)
-                ),
-                timeout=1800,
-                output=self.output,
-                error=self.error,
-                inherit_stdin=False,
-            )
-        except CommandError as exc:
-            raise RuntimeOpenError("krun agent image failed to build") from exc
+        for argv in (
+            build_base_image_argv(
+                self.paths,
+                manifest,
+                build_arguments=config.build_arguments(),
+                engine=os.fspath(self.podman.engine),
+            ),
+            build_runtime_image_argv(
+                self.paths,
+                manifest,
+                build_arguments=config.build_arguments(),
+                engine=os.fspath(self.podman.engine),
+            ),
+        ):
+            try:
+                run_streaming(
+                    argv,
+                    timeout=1800,
+                    output=self.output,
+                    error=self.error,
+                    inherit_stdin=False,
+                )
+            except CommandError as exc:
+                raise RuntimeOpenError(
+                    f"{manifest.name} runtime image failed to build"
+                ) from exc
         self.output.write(
-            f"{_GREEN}Krun agent image ready{_RESET} "
+            f"{_GREEN}Runtime image ready{_RESET} "
             f"{_DIM}({time.monotonic() - started:.1f}s){_RESET}\n"
         )
 
-    def _generate_devcontainer(
-        self,
-        plan: RuntimePlan,
-        manifest: RuntimeManifest,
-        config: AsfConfig,
-        broker: BrokerRequest | None,
-    ) -> DevcontainerRequest:
-        repositories = self._load_repositories(manifest)
-        ssh_socket = config.ssh_agent_socket()
-        if ssh_socket is not None:
-            self.error.write(
-                f"  {_YELLOW}⚠ SSH agent forwarding ENABLED{_RESET} "
-                f"{_DIM}({ssh_socket}){_RESET}\n"
-                f"    {_DIM}every identity this agent holds is usable by the "
-                f"container for the whole session{_RESET}\n"
-            )
-        self.output.write(f"{_BLUE}Updating mounts...{_RESET}\n")
-        request = DevcontainerRequest(
-            self.paths,
-            plan,
-            manifest,
-            repositories=tuple(repositories),
-            run_arguments=config.hardening_arguments(manifest),
-            build_arguments=config.build_arguments(),
-            ssh_agent_socket=ssh_socket,
-            proxy_port=PROXY_PORT,
-            broker_default_model=(broker.models.default_model if broker else ""),
-        )
-        write_atomic(request.output_path, build_devcontainer_config(request))
-        self.output.write(f"Wrote {request.output_path}\n\n")
-        return request
+    def _ensure_krun_image(self, request: KrunRequest) -> None:
+        config = AsfConfig.load(self.paths.config_file)
+        self._build_runtime_image(request.manifest, config)
 
-    def _devcontainer_flags(self, plan: RuntimePlan) -> tuple[str, ...]:
-        config_path = self.paths.session_artifact(plan.runtime, "devcontainer.json")
-        return (
-            "--docker-path",
-            str(self.podman.engine),
-            "--config",
-            str(config_path),
-            "--id-label",
-            plan.session_label,
-        )
-
-    def _devcontainer_up_argv(self, plan: RuntimePlan) -> tuple[str, ...]:
-        return (
-            "devcontainer",
-            "up",
-            *self._devcontainer_flags(plan),
-            "--workspace-folder",
-            str(self.paths.root),
-            "--remove-existing-container",
-        )
-
-    def _start_devcontainer(
-        self, plan: RuntimePlan, environment: dict[str, str]
+    def _start_container(
+        self, request: ContainerRequest, environment: dict[str, str]
     ) -> None:
+        self.output.write(f"{_BLUE}Starting container...{_RESET}\n")
         started = time.monotonic()
+        temporary_name: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                prefix="asf-runtime-",
+                delete=False,
+            ) as handle:
+                temporary_name = handle.name
+                os.chmod(temporary_name, 0o600)
+                for key, value in environment.items():
+                    handle.write(f"{key}={value}\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                # Detached Podman prints the container ID on stdout. ASF already
+                # tracks the deterministic container name, so keep startup output
+                # focused while still streaming Podman errors to the operator.
+                run_streaming(
+                    build_container_run_argv(
+                        request,
+                        env_file=Path(temporary_name),
+                        engine=os.fspath(self.podman.engine),
+                    ),
+                    timeout=1800,
+                    output=io.StringIO(),
+                    error=self.error,
+                    inherit_stdin=False,
+                )
+            except CommandError as exc:
+                raise RuntimeOpenError("Container failed to start.") from exc
+        finally:
+            if temporary_name is not None:
+                Path(temporary_name).unlink(missing_ok=True)
+
         try:
             run_streaming(
-                self._devcontainer_up_argv(plan),
-                timeout=1800,
+                (
+                    os.fspath(self.podman.engine),
+                    "exec",
+                    request.plan.runtime_container.name,
+                    "bash",
+                    "/workspace/sandbox/containers/on-start.sh",
+                ),
+                timeout=300,
                 output=self.output,
                 error=self.error,
                 inherit_stdin=False,
-                env=environment,
-                redact_values=tuple(environment.values()),
             )
         except CommandError as exc:
-            raise RuntimeOpenError("Container failed to start.") from exc
+            raise RuntimeOpenError("Container bootstrap failed.") from exc
         self.output.write(
             f"{_GREEN}Container ready{_RESET} "
-            f"{_DIM}({time.monotonic() - started:.1f}s){_RESET}\n"
-        )
-
-    def _devcontainer_exec_argv(
-        self,
-        plan: RuntimePlan,
-        remote_environment: Sequence[tuple[str, str]],
-        *,
-        command: Sequence[str] | None = None,
-    ) -> tuple[str, ...]:
-        selected = tuple(command) if command is not None else (
-            plan.command if plan.runtime_mode == "service" else ("zsh",)
-        )
-        if not selected:
-            raise RuntimeOpenError(
-                f"Runtime {plan.runtime} sets mode: service but no runtime.command"
-            )
-        env_args: list[str] = []
-        for key, value in remote_environment:
-            env_args.extend(("--remote-env", f"{key}={value}"))
-        return (
-            "devcontainer",
-            "exec",
-            *self._devcontainer_flags(plan),
-            "--workspace-folder",
-            str(self.paths.root),
-            *env_args,
-            "--",
-            *selected,
+            f"{_DIM}({time.monotonic() - started:.1f}s){_RESET}\n\n"
         )
 
     def _emit_stop_event(self, event: StopEvent) -> None:

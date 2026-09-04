@@ -64,7 +64,6 @@ cat > "$TMP/asf/tests/runtime-krun-checks.sh" <<'EOF_CHECKS'
 set -euo pipefail
 
 test "${ASF_ISOLATION:-}" = microvm
-test -z "${DEVCONTAINER+x}"
 echo MARK:krun-runtime
 
 printf 'krun guest identity: uid=%s gid=%s\n' "$(id -u)" "$(id -g)"

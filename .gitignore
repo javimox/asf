@@ -1,11 +1,8 @@
 # ASF generated runtime state
 
-/.devcontainer/devcontainer.json
-/.devcontainer/sessions/
-/.devcontainer/.firewall-hash
-/.devcontainer/.current-agent
-/.devcontainer/.broker-host-*
-/.devcontainer/.open-lock-*
+/.asf/sessions/
+/.asf/.broker-host-*
+/.asf/.open-lock-*
 
 /persistent/
 

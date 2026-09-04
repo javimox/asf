@@ -61,7 +61,9 @@ json_labels() {
 
 container_exists() {
     local ref="$1" role name
-    [[ "$ref" == agent-test-container && -f "$STATE/runtime_exists" ]] && return 0
+    if [[ -f "$STATE/runtime_exists" ]]; then
+        [[ "$ref" == agent-test-container || "$ref" == "$(read_value runtime_name)" ]] && return 0
+    fi
     for role in proxy broker routed-gateway routed-init; do
         name=$(read_value "${role}_name")
         [[ -f "$STATE/${role}_exists" && ( "$ref" == "$name" || "$ref" == "${name}-id" ) ]] && return 0
@@ -71,7 +73,7 @@ container_exists() {
 
 remove_container() {
     local ref="$1" role name
-    if [[ "$ref" == agent-test-container || "$ref" == stale-agent-container ]]; then
+    if [[ "$ref" == agent-test-container || "$ref" == stale-agent-container || "$ref" == "$(read_value runtime_name)" ]]; then
         remove_value runtime_exists
         return
     fi
@@ -169,7 +171,7 @@ case "${1:-}" in
             fi
         done
         text="$* $input"
-        name="" role="" agent="" sandbox=""
+        name="" role="" agent="" sandbox="" session=""
         previous=""
         for arg in "$@"; do
             if [[ "$previous" == --name ]]; then name="$arg"; fi
@@ -178,6 +180,7 @@ case "${1:-}" in
                     asf.role=*) role=${arg#asf.role=} ;;
                     asf.agent=*) agent=${arg#asf.agent=} ;;
                     asf.sandbox=*) sandbox=${arg#asf.sandbox=} ;;
+                    asf.session=*) session=${arg#asf.session=} ;;
                 esac
             fi
             case "$arg" in
@@ -185,6 +188,7 @@ case "${1:-}" in
                 --label=asf.role=*) role=${arg#--label=asf.role=} ;;
                 --label=asf.agent=*) agent=${arg#--label=asf.agent=} ;;
                 --label=asf.sandbox=*) sandbox=${arg#--label=asf.sandbox=} ;;
+                --label=asf.session=*) session=${arg#--label=asf.session=} ;;
             esac
             previous="$arg"
         done
@@ -193,6 +197,14 @@ case "${1:-}" in
             write_value "${role}_agent" "$agent"
             write_value "${role}_sandbox" "$sandbox"
             : > "$STATE/${role}_exists"
+        elif [[ -n "$name" && -n "$session" ]]; then
+            write_value runtime_session "$session"
+            write_value runtime_name "$name"
+            : > "$STATE/runtime_exists"
+            if [[ " $* " == *" --detach "* ]]; then
+                printf '%s\n' agent-test-container
+                exit 0
+            fi
         fi
         probe_result "$text"
         exit $?
@@ -212,6 +224,16 @@ case "${1:-}" in
             fi
             probe_result "$text"
             exit $?
+        fi
+        if [[ "$text" == *"/workspace/sandbox/containers/on-start.sh"* ]]; then
+            exit 0
+        fi
+        if [[ "${ASF_FAKE_RUNTIME_BLOCK:-false}" == true ]]; then
+            [[ -z "${SESSION_STARTED:-}" ]] || : > "$SESSION_STARTED"
+            trap 'exit 129' HUP
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            while :; do sleep 1; done
         fi
         exit 0
         ;;

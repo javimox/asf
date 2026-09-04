@@ -57,7 +57,6 @@ class ConsolidationTests(unittest.TestCase):
     def test_obsolete_migration_wrappers_are_removed(self) -> None:
         for relative in (
             "tools/build_runtime_plan.py",
-            "tools/generate_devcontainer.py",
             "tools/load_runtime.py",
             "asf/repos.py",
             "asf/locks.py",
@@ -70,7 +69,7 @@ class ConsolidationTests(unittest.TestCase):
         self.assertFalse((ROOT / ".claude/settings.local.json").exists())
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(".claude/", ignore)
-        self.assertIn(".devcontainer/sessions/", ignore)
+        self.assertIn(".asf/sessions/", ignore)
         self.assertIn("__pycache__/", ignore)
         self.assertIn("build/", ignore)
         self.assertIn("dist/", ignore)

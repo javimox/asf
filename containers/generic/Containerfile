@@ -1,0 +1,4 @@
+ARG ASF_BASE_IMAGE
+FROM ${ASF_BASE_IMAGE}
+
+RUN python3 --version && uv --version

@@ -265,14 +265,14 @@ class BrokerRequest:
         )
         if matches != (expected,):
             raise BrokerError("broker plan must contain exactly its host state path")
-        if self.paths.devcontainer_dir.is_symlink():
-            raise BrokerError(".devcontainer must not be a symlink")
+        if self.paths.runtime_state_dir.is_symlink():
+            raise BrokerError(".asf must not be a symlink")
         try:
-            safe = self.paths.child(".devcontainer", expected.name)
+            safe = self.paths.child(".asf", expected.name)
         except ValidationError as exc:
-            raise BrokerError("broker state path escaped .devcontainer") from exc
+            raise BrokerError("broker state path escaped .asf") from exc
         if safe != expected:
-            raise BrokerError("broker state path escaped .devcontainer")
+            raise BrokerError("broker state path escaped .asf")
         return safe
 
     @property

@@ -58,7 +58,7 @@ a sensitive persistent credential.
 
 At container start, secrets declared through ASF are injected only where the
 selected authentication path requires them; they are never baked into the image
-or stored in generated `devcontainer.json`.
+or persisted in generated ASF session state.
 
 The ASF project root is mounted read-only at `/workspace/sandbox` so the live
 policy files are available at startup. To prevent that broad mount from exposing
@@ -215,7 +215,7 @@ API-key/broker operation is not part of this supplied profile.
 Hermes uses its existing `openai-api` configuration. When the broker is active,
 ASF sets `OPENAI_BASE_URL` to LiteLLM's OpenAI-compatible `/v1` endpoint and
 replaces `OPENAI_API_KEY` with the temporary session token. The reusable OpenAI
-key is filtered out of both normal and attached shells.
+key is filtered out of both normal and later sandbox shells.
 ### Broker diagnostics
 
 Run these commands from a second terminal while either agent session is active:
@@ -322,10 +322,9 @@ none of those destination fields.
 Requires PyYAML on the host (`pacman -S python-yaml`, `apt install python3-yaml`,
 or `pip install pyyaml`).
 
-`runtime.isolation` is optional. `container` is the default and preserves the
-existing Dev Container lifecycle. `krun` runs only the agent workload behind a
-libkrun/KVM boundary and has deliberate runtime constraints; see
-[microVM isolation](KRUN.md).
+`runtime.isolation` is optional. `container` is the default and uses rootless
+Podman directly. `microvm` runs only the agent workload behind a libkrun/KVM
+boundary and has deliberate runtime constraints; see [microVM isolation](KRUN.md).
 ### LangGraph, CrewAI, smolagents, or your own Python agent
 
 ASF sandboxes these as **one workload** — there is no CrewAI adapter and no
@@ -400,16 +399,12 @@ Internal support services use short, session-network-scoped DNS aliases
 (`asf-proxy` and `asf-broker`). Their full checkout/PID-scoped container names
 are still used for ownership, diagnostics, and cleanup.
 
-How it works: `sandbox.sh` generates
-`.devcontainer/sessions/<agent>/devcontainer.json` per agent (the CLI requires
-that exact filename, so agents get separate directories) and passes `--config`
-plus `--id-label asf.session=<checkout>-<agent>` to `up`/`exec`, so the CLI
-treats each agent as a distinct container instead of recreating a shared one.
-`build` takes only `--config`; it creates an image, not a container. The agent
-name reaches the container through `ASF_AGENT` (`containerEnv`), and each
-session gets its own three networks, so there is no shared state for two
-sessions to race over. Locks are per agent: opening
-`claude` twice is refused, opening `claude` alongside `hermes` is not.
+How it works: ASF writes the resolved runtime plan under
+`.asf/sessions/<agent>/`, gives each Podman resource a checkout/agent-scoped
+identity, and creates the session's networks and support services before the
+agent runtime. The active agent name reaches the runtime through `ASF_AGENT`.
+Locks are per agent: opening `claude` twice is refused, while opening `claude`
+alongside `hermes` is allowed.
 ### Two sessions of the *same* agent
 
 Not supported inside one checkout (they would share a state volume). Copy the
@@ -433,7 +428,7 @@ than one is running:
 ./sandbox.sh observe [agent]     # host-side session and privilege state
 ./sandbox.sh capture start [agent] # start routed microVM PCAP capture
 ./sandbox.sh capture stop [agent]  # stop capture and finalize the PCAP
-./sandbox.sh shell hermes        # attach
+./sandbox.sh shell hermes        # open a shell
 ./sandbox.sh broker status claude
 ./sandbox.sh scan my-api hermes
 ./sandbox.sh stop claude         # stop one session

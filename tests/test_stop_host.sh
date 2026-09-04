@@ -267,7 +267,7 @@ echo "  ✓ live stop, verification, idempotency, and volumes"
 
 echo "Signal-triggered cleanup (${AGENT})"
 open_session "$OUTPUT_DIR/signal"
-lock_pid_file="$ROOT/.devcontainer/.open-lock-${AGENT}/pid"
+lock_pid_file="$ROOT/.asf/.open-lock-${AGENT}/pid"
 [[ -f "$lock_pid_file" && "$(tr -d '\n' < "$lock_pid_file")" == "$OPEN_PID" ]] || {
     echo "open lock PID did not survive the session-supervisor handoff" >&2
     exit 1

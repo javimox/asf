@@ -18,11 +18,10 @@ building it.
 
 ## Quick start
 
-**Requirements:** Python with PyYAML and rootless Podman. The default container
-backend also uses the Dev Container CLI (`@devcontainers/cli`). Optional
-[microVM isolation](docs/KRUN.md) replaces that dependency and is currently
-implemented with krun/libkrun/KVM. See
-[Getting started](docs/GETTING-STARTED.md#prerequisites) for installation details.
+**Requirements:** Python with PyYAML and rootless Podman. Optional
+[microVM isolation](docs/KRUN.md) is currently implemented with
+krun/libkrun/KVM. See [Getting started](docs/GETTING-STARTED.md#prerequisites)
+for installation details.
 
 ASF runtimes are configured per agent. In general:
 
@@ -50,7 +49,7 @@ $EDITOR secrets/claude.env
 ./sandbox.sh open claude
 ```
 
-Inside the container:
+Inside the runtime:
 
 ```bash
 cd /workspace/repos/my-api
@@ -119,7 +118,6 @@ The full documentation is organized under [docs/](docs/README.md):
 
 - [Network design](docs/NETWORK-DESIGN.md)
 - [Egress design](docs/EGRESS-DESIGN.md)
-- [Dev Container integration](docs/DEVCONTAINER.md)
 - [microVM isolation](docs/KRUN.md)
 - [observability](docs/OBSERVABILITY.md)
 - [Dependencies and SBOM scope](docs/DEPENDENCIES.md)

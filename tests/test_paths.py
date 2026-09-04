@@ -29,7 +29,7 @@ def make_fake_checkout(root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
     (root / "agents").mkdir()
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
     return root
 
 
@@ -124,11 +124,9 @@ class LayoutTests(unittest.TestCase):
             "secrets_dir": root / "secrets",
             "tools_dir": root / "tools",
             "tests_dir": root / "tests",
-            "devcontainer_dir": root / ".devcontainer",
-            "sessions_dir": root / ".devcontainer" / "sessions",
-            "devcontainer_base": (
-                root / ".devcontainer" / "devcontainer.base.json"
-            ),
+            "containers_dir": root / "containers",
+            "runtime_state_dir": root / ".asf",
+            "sessions_dir": root / ".asf" / "sessions",
             "broker_probe_tool": root / "tools" / "broker_probe.py",
             "litellm_entrypoint": root / "tools" / "litellm_entrypoint.py",
             "litellm_observer": root / "tools" / "litellm_observer.py",
@@ -151,7 +149,7 @@ class LayoutTests(unittest.TestCase):
         for path in (
             self.paths.agents_dir,
             self.paths.tools_dir,
-            self.paths.devcontainer_dir,
+            self.paths.containers_dir,
         ):
             with self.subTest(path=path):
                 self.assertTrue(path.is_dir())
@@ -308,7 +306,7 @@ class SessionArtifactTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertEqual(
             actual.parent,
-            self.paths.identity.config_json("hermes").parent,
+            self.paths.identity.session_dir("hermes"),
         )
 
     def test_validates_runtime_and_artifact_components(self) -> None:

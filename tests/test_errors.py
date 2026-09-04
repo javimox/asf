@@ -205,13 +205,6 @@ class SubsystemIntegrationTests(unittest.TestCase):
         self.assertTrue(issubclass(RuntimePlanError, ValidationError))
         self.assertFalse(issubclass(RuntimePlanError, InfrastructureError))
 
-    def test_devcontainer_errors_are_configuration_errors(self) -> None:
-        from asf.devcontainer import DevcontainerError
-
-        self.assertTrue(issubclass(DevcontainerError, ConfigurationError))
-        self.assertTrue(issubclass(DevcontainerError, ValidationError))
-        self.assertFalse(issubclass(DevcontainerError, InfrastructureError))
-
     def test_proxy_errors_use_shared_categories(self) -> None:
         from asf.proxy import ProxyError, ProxyLifecycleError
 
@@ -242,7 +235,7 @@ class SubsystemIntegrationTests(unittest.TestCase):
         from asf import (
             broker,
             cleanup,
-            devcontainer,
+            runtime_container,
             diagnostics,
             identity,
             manifest,
@@ -263,7 +256,7 @@ class SubsystemIntegrationTests(unittest.TestCase):
         for module in (
             broker,
             cleanup,
-            devcontainer,
+            runtime_container,
             diagnostics,
             identity,
             manifest,

@@ -222,7 +222,8 @@ class StopCommandVectorTests(unittest.TestCase):
         cls.checkout = cls.base / "checkout"
         cls.checkout.mkdir()
         (cls.checkout / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
-        (cls.checkout / ".devcontainer").mkdir()
+        (cls.checkout / "containers").mkdir()
+        (cls.checkout / ".asf").mkdir()
         (cls.checkout / "agents").mkdir()
         for name, text in cls.doc["manifests"].items():
             directory = cls.checkout / "agents" / name
@@ -268,8 +269,8 @@ class StopCommandVectorTests(unittest.TestCase):
     def _prepare_files(cls, vector: dict) -> None:
         shutil.rmtree(cls.reservations, ignore_errors=True)
         cls.reservations.mkdir(parents=True)
-        devcontainer = cls.checkout / ".devcontainer"
-        for entry in tuple(devcontainer.iterdir()):
+        runtime_state = cls.checkout / ".asf"
+        for entry in tuple(runtime_state.iterdir()):
             if entry.name.startswith((".open-lock-", ".broker-host-")):
                 if entry.is_dir() and not entry.is_symlink():
                     shutil.rmtree(entry)
@@ -445,7 +446,8 @@ class StopCommandVectorTests(unittest.TestCase):
         checkout.mkdir()
         shutil.copy2(ROOT / "sandbox.sh", checkout / "sandbox.sh")
         (checkout / "asf").symlink_to(ROOT / "asf", target_is_directory=True)
-        (checkout / ".devcontainer").mkdir()
+        (checkout / "containers").mkdir()
+        (checkout / ".asf").mkdir()
         (checkout / "agents").mkdir()
         for name, text in self.doc["manifests"].items():
             directory = checkout / "agents" / name

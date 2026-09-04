@@ -34,7 +34,8 @@ from asf.subnets import reservation_path
 def make_checkout(root: Path, runtimes: tuple[str, ...] = ("claude",)) -> RepoPaths:
     root.mkdir(parents=True, exist_ok=True)
     (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
+    (root / ".asf").mkdir()
     (root / "agents").mkdir()
     for runtime in runtimes:
         directory = root / "agents" / runtime

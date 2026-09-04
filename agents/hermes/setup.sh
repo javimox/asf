@@ -58,7 +58,7 @@ fi
 
 echo "  ✓ Run: hermes"
 echo ""
-echo "  Secrets are injected from the HOST at container start — do NOT write"
+echo "  Secrets are injected from the HOST into the Hermes process — do NOT write"
 echo "  API keys into ~/.hermes/.env inside the container."
 echo "  Put them on the host in:  secrets/common.env  or  secrets/hermes.env"
 echo "  e.g.  echo 'OPENAI_API_KEY=sk-...' >> secrets/hermes.env  (on host)"

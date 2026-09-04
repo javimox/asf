@@ -54,7 +54,7 @@ class SbomTests(unittest.TestCase):
             root = Path(temporary)
             kept = root / "tracked.txt"
             kept.write_text("source\n", encoding="utf-8")
-            generated = root / ".devcontainer" / "sessions" / "hermes" / "runtime-plan.json"
+            generated = root / ".asf" / "sessions" / "hermes" / "runtime-plan.json"
             generated.parent.mkdir(parents=True)
             generated.write_text("{}\n", encoding="utf-8")
 
@@ -67,7 +67,7 @@ class SbomTests(unittest.TestCase):
             relatives = {path.relative_to(root) for path in files}
             self.assertIn(Path("tracked.txt"), relatives)
             self.assertNotIn(
-                Path(".devcontainer/sessions/hermes/runtime-plan.json"),
+                Path(".asf/sessions/hermes/runtime-plan.json"),
                 relatives,
             )
 

@@ -1,0 +1,83 @@
+ARG ASF_BASE_IMAGE
+FROM ${ASF_BASE_IMAGE}
+
+ARG HERMES_AGENT_COMMIT=f9eca7e15f1c2bfe5194aae5aa489af53c0a1a23
+ARG TIRITH_VERSION=0.4.0
+ARG TIRITH_SHA256_AMD64=ec90836eef3519829f0b8371836a09c12c31fd8620d411a38b69423b19b5e468
+ARG TIRITH_SHA256_ARM64=8d421d04079ad88caf660dc021bc2e8447142c2d308a4998595ba24a4d2c23c6
+
+ENV PATH="/home/node/.hermes/bin:${PATH}"
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
+USER root
+RUN mkdir -p /home/node/.hermes/bin \
+    && cp /usr/local/bin/uv /home/node/.hermes/bin/uv \
+    && chown -R node:node /home/node/.hermes
+
+COPY --chown=node:node \
+    agents/hermes/patches/gpt-5.6-reasoning-none.patch \
+    /tmp/hermes-gpt-5.6-reasoning-none.patch
+COPY --chown=node:node \
+    containers/hermes/apply_tirith_fail_closed.py \
+    /tmp/apply-tirith-fail-closed.py
+
+USER node
+RUN set -eu; \
+    echo ">>> Installing Hermes agent at ${HERMES_AGENT_COMMIT}"; \
+    curl --fail --location --retry 5 --retry-delay 2 \
+      --output /tmp/hermes-install.sh \
+      "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_AGENT_COMMIT}/scripts/install.sh"; \
+    bash /tmp/hermes-install.sh \
+      --commit "$HERMES_AGENT_COMMIT" \
+      --skip-setup \
+      --skip-browser \
+      --non-interactive; \
+    rm /tmp/hermes-install.sh; \
+    HERMES_REPO=/home/node/.hermes/hermes-agent; \
+    echo ">>> Enforcing ASF Tirith fail-closed circuit breaker"; \
+    python3 /tmp/apply-tirith-fail-closed.py "$HERMES_REPO/tools/tirith_security.py"; \
+    rm /tmp/apply-tirith-fail-closed.py; \
+    echo ">>> Verifying the Hermes CLI installation"; \
+    test -x /home/node/.local/bin/hermes; \
+    timeout 120 /home/node/.local/bin/hermes --help >/dev/null; \
+    echo ">>> Hermes CLI verified"
+
+USER root
+RUN set -eu; \
+    echo ">>> Installing Tirith ${TIRITH_VERSION}"; \
+    ARCH=$(dpkg --print-architecture); \
+    case "$ARCH" in \
+      amd64) TIRITH_TARGET=x86_64-unknown-linux-gnu; TIRITH_SHA256="$TIRITH_SHA256_AMD64" ;; \
+      arm64) TIRITH_TARGET=aarch64-unknown-linux-gnu; TIRITH_SHA256="$TIRITH_SHA256_ARM64" ;; \
+      *) echo "ERROR: unsupported architecture for tirith: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location --retry 5 --retry-delay 2 \
+      --output /tmp/tirith.tar.gz \
+      "https://github.com/sheeki03/tirith/releases/download/v${TIRITH_VERSION}/tirith-${TIRITH_TARGET}.tar.gz"; \
+    printf '%s  %s\n' "$TIRITH_SHA256" /tmp/tirith.tar.gz | sha256sum --check --strict -; \
+    tar -xzf /tmp/tirith.tar.gz -C /usr/local/bin tirith; \
+    rm /tmp/tirith.tar.gz; \
+    chmod 0755 /usr/local/bin/tirith; \
+    tirith --version
+
+RUN set -u; \
+    echo ">>> Provisioning optional Hermes media + browser dependencies"; \
+    if apt-get update && apt-get install -y --no-install-recommends ffmpeg; then \
+        echo ">>> ffmpeg installed"; \
+    else \
+        echo "WARNING: optional ffmpeg install failed" >&2; \
+    fi; \
+    mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"; \
+    HERMES_REPO=/home/node/.hermes/hermes-agent; \
+    PW=$(find "$HERMES_REPO" -maxdepth 4 -path '*/node_modules/.bin/playwright' -type f -print -quit 2>/dev/null); \
+    if [ -n "$PW" ] && [ -x "$PW" ]; then \
+        "$PW" install-deps chromium || echo "WARNING: optional Playwright dependencies failed" >&2; \
+        "$PW" install chromium || echo "WARNING: optional Chromium download failed" >&2; \
+    else \
+        echo "WARNING: Playwright not found; browser tools are unavailable" >&2; \
+    fi; \
+    chown -R node:node "$PLAYWRIGHT_BROWSERS_PATH"; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+USER node

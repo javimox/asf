@@ -1,0 +1,107 @@
+ARG NODE_IMAGE=node:22.23.1-bookworm-slim
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.31
+FROM ${UV_IMAGE} AS uv
+FROM ${NODE_IMAGE}
+
+ARG TZ=UTC
+ENV TZ="$TZ"
+
+ARG SEMGREP_VERSION=1.171.0
+ARG GIT_DELTA_VERSION=0.18.2
+ARG FZF_VERSION=0.74.1
+ARG FZF_SHA256_AMD64=df53438be5f51e151bb4044d78fda72bdfe209e3ecd2baecae48e8dea370c81b
+ARG FZF_SHA256_ARM64=f22204dd1a091d43e102268d062fd53b47133c8d8581671ee5eb225b75e31183
+ARG ZSH_IN_DOCKER_VERSION=1.2.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    locales \
+    less \
+    git \
+    procps \
+    util-linux \
+    tar \
+    zsh \
+    man-db \
+    unzip \
+    gnupg2 \
+    gh \
+    iproute2 \
+    iputils-ping \
+    jq \
+    netcat-openbsd \
+    ripgrep \
+    nano \
+    vim \
+    curl \
+    ca-certificates \
+    python3-pip \
+    python3-yaml \
+    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
+    && locale-gen \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+RUN pip3 install "semgrep==${SEMGREP_VERSION}" --break-system-packages \
+    && semgrep --version
+
+COPY --from=uv /uv /uvx /usr/local/bin/
+RUN uv --version
+
+RUN set -eu; \
+    ARCH=$(dpkg --print-architecture); \
+    case "$ARCH" in \
+      amd64) FZF_ARCH=amd64; FZF_SHA256="$FZF_SHA256_AMD64" ;; \
+      arm64) FZF_ARCH=arm64; FZF_SHA256="$FZF_SHA256_ARM64" ;; \
+      *) echo "ERROR: unsupported architecture for fzf: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location --retry 5 --retry-delay 2 \
+      --output /tmp/fzf.tar.gz \
+      "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_${FZF_ARCH}.tar.gz"; \
+    printf '%s  %s\n' "$FZF_SHA256" /tmp/fzf.tar.gz | sha256sum --check --strict -; \
+    tar -xzf /tmp/fzf.tar.gz -C /usr/local/bin fzf; \
+    rm /tmp/fzf.tar.gz; \
+    fzf --version
+
+RUN mkdir -p /usr/local/share/npm-global /workspace /commandhistory /home/node/.local/bin \
+    && touch /commandhistory/.bash_history \
+    && chown -R node:node /usr/local/share/npm-global /workspace /commandhistory /home/node/.local
+
+RUN set -eu; \
+    ARCH=$(dpkg --print-architecture); \
+    curl --fail --location --retry 5 --retry-delay 2 \
+        --output /tmp/git-delta.deb \
+        "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"; \
+    (dpkg -i /tmp/git-delta.deb || apt-get install -fy); \
+    rm /tmp/git-delta.deb; \
+    delta --version
+
+USER node
+ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+ENV PATH="/home/node/.local/bin:/usr/local/share/npm-global/bin:${PATH}"
+ENV SHELL=/bin/zsh
+ENV EDITOR=nano
+ENV VISUAL=nano
+ENV ZSH_COMPDUMP=/home/node/.zcompdump
+
+RUN set -eu; \
+    curl --fail --location --retry 5 --retry-delay 2 \
+        --output /tmp/zsh-in-docker.sh \
+        "https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh"; \
+    sh /tmp/zsh-in-docker.sh \
+        -p git \
+        -p fzf \
+        -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
+        -x; \
+    rm /tmp/zsh-in-docker.sh
+
+RUN zsh -f -c ' \
+    fpath=("$HOME/.oh-my-zsh/functions" "$HOME/.oh-my-zsh/completions" \
+      "$HOME/.oh-my-zsh/plugins/git" "$HOME/.oh-my-zsh/plugins/fzf" $fpath); \
+    autoload -Uz compinit; \
+    compinit -d "$ZSH_COMPDUMP" \
+'
+
+WORKDIR /workspace

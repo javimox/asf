@@ -237,7 +237,8 @@ class SecurityCommandTests(unittest.TestCase):
         try:
             root = Path(temporary.name) / "asf"
             (root / "agents" / "claude").mkdir(parents=True)
-            (root / ".devcontainer").mkdir()
+            (root / "containers").mkdir()
+            (root / ".asf").mkdir()
             (root / "secrets").mkdir()
             (root / "sandbox.sh").write_text("#!/bin/sh\n")
             (root / "asf.conf").write_text(

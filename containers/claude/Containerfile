@@ -1,0 +1,9 @@
+ARG ASF_BASE_IMAGE
+FROM ${ASF_BASE_IMAGE}
+
+ARG CLAUDE_CODE_VERSION=2.1.216
+USER root
+RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude
+USER node
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+    && claude --version

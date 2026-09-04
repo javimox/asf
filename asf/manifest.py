@@ -5,7 +5,7 @@ callers use the immutable :func:`parse` and :func:`load_model` APIs; diagnostics
 and fixtures consume the same canonical validated representation.
 
 A manifest declares one sandboxed workload. This loader is the single place
-that knows the manifest's shape; the CLI and Dev Container renderer consume its
+that knows the manifest's shape; the CLI and runtime backends consume its
 output instead of hardcoding per-agent behaviour.
 
 Design rules:

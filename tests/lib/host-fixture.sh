@@ -60,8 +60,8 @@ host_fixture_prepare_checkout() {
     # Never read or modify the operator's credentials, manifests, locks, or
     # persistent session state. Every host test receives a private checkout.
     cp -a "$SOURCE_ROOT/." "$ROOT"
-    rm -rf "$ROOT/.devcontainer/sessions"
-    find "$ROOT/.devcontainer" -maxdepth 1 -name '.open-lock-*' -exec rm -rf {} +
+    rm -rf "$ROOT/.asf/sessions"
+    find "$ROOT/.asf" -maxdepth 1 -name '.open-lock-*' -exec rm -rf {} +
 
     python3 - "$ROOT/asf.conf" "$MODEL_SETTING" <<'PY'
 from pathlib import Path

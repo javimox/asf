@@ -27,7 +27,7 @@ __all__ = [
 _REQUIRED_MARKERS: Final = (
     ("sandbox.sh", "file"),
     ("agents", "directory"),
-    (".devcontainer", "directory"),
+    ("containers", "directory"),
 )
 
 
@@ -176,22 +176,22 @@ class RepoPaths:
         return self.root / "tests"
 
     @property
-    def devcontainer_dir(self) -> Path:
-        return self.root / ".devcontainer"
+    def containers_dir(self) -> Path:
+        return self.root / "containers"
+
+    @property
+    def runtime_state_dir(self) -> Path:
+        return self.root / ".asf"
 
     @property
     def sessions_dir(self) -> Path:
-        return self.devcontainer_dir / "sessions"
+        return self.runtime_state_dir / "sessions"
 
     @property
     def state_dir(self) -> Path:
         """Checkout-scoped host state that is never placed inside the checkout."""
 
         return _safe_child(self._state_home, ("asf", self.identity.prefix))
-
-    @property
-    def devcontainer_base(self) -> Path:
-        return self.devcontainer_dir / "devcontainer.base.json"
 
     @property
     def broker_probe_tool(self) -> Path:

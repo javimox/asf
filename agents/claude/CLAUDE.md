@@ -2,7 +2,7 @@
 
 ## Operating rules
 
-You are running inside a devcontainer.
+You are running inside an ASF sandbox.
 
 Before modifying files:
 

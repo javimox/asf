@@ -90,7 +90,7 @@ _HELP = """
   ./sandbox.sh open <agent>        start an interactive sandbox session
   ./sandbox.sh run <agent> -- <command> [args...]
                                   run one command in a fresh sandbox session
-  ./sandbox.sh shell [agent]       attach to a running agent session
+  ./sandbox.sh shell [agent]       open a shell in a running agent session
   ./sandbox.sh ls                  show running and deployed agent sessions
   ./sandbox.sh observe [agent]     show host-side session and privilege state
   ./sandbox.sh capture start [agent]  start routed microVM packet capture

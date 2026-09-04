@@ -8,20 +8,18 @@ identity and persisted-plan boundaries as ``open``.
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from dataclasses import dataclass
 from typing import Sequence, TextIO
 
 from .config import AsfConfig
-from .devcontainer import BuildDevcontainerRequest, build_build_config, write_atomic
 from .errors import ConfigurationError, InfrastructureError, UsageError
-from .krun import build_krun_image_argv
 from .manifest import load_model
 from .paths import RepoPaths
 from .podman import PodmanClient
 from .process import run
 from .repositories import RepositoryStore
+from .runtime_image import build_base_image_argv, build_runtime_image_argv
 from .runtime_plan import (
     load_runtime_plan,
     runtime_plan_path,
@@ -88,87 +86,24 @@ def _build(
     runtime = arguments[0]
     manifest = load_model(paths.identity.runtime_manifest(runtime))
     config = AsfConfig.load(paths.config_file)
-    if manifest.runtime.isolation == "microvm":
-        output.write(f"{_BLUE}Building {runtime} krun image...{_RESET}\n")
-        result = run(
-            build_krun_image_argv(
-                paths,
-                manifest,
-                build_arguments=config.build_arguments(),
-                engine=os.fspath(podman.engine),
-            ),
-            timeout=1800,
-            capture=False,
-        )
-        if result.returncode != 0:  # ``run`` raises; retained for custom runners.
-            raise MaintenanceError("Build failed.")
-        output.write(
-            f"{_GREEN}Done.{_RESET} Run {_BLUE}./sandbox.sh open {runtime}{_RESET} "
-            "to start a session.\n"
-        )
-        return MaintenanceResult()
-
-    _require_devcontainer()
-
-    repositories = []
-    store = RepositoryStore.for_file(
-        paths.agent_repos_file(runtime),
-        runtime=runtime,
-    )
-    for entry in store.entries():
-        if entry.exists:
-            access = "read-only" if entry.mode == "ro" else "read-write"
-            output.write(
-                f"  {_GREEN}+{_RESET} {entry.name} {_DIM}({access}){_RESET}\n"
-            )
-            repositories.append(entry)
-        else:
-            output.write(
-                f"  {_YELLOW}⚠{_RESET} skipping (not found): "
-                f"{_DIM}{entry.path}{_RESET}\n"
-            )
-    if not repositories:
-        output.write(
-            f"  {_YELLOW}no repos configured for {runtime}{_RESET} — run: "
-            f"./sandbox.sh repo add {runtime} ~/path/to/repo\n"
-        )
-
-    socket = config.ssh_agent_socket()
-    if socket is not None:
-        error.write(
-            f"  {_YELLOW}⚠ SSH agent forwarding ENABLED{_RESET} "
-            f"{_DIM}({socket}){_RESET}\n"
-            f"    {_DIM}every identity this agent holds is usable by the "
-            f"container for the whole build{_RESET}\n"
-        )
-
-    request = BuildDevcontainerRequest(
-        paths,
-        manifest,
-        repositories=tuple(repositories),
-        run_arguments=config.hardening_arguments(manifest),
-        build_arguments=config.build_arguments(),
-        ssh_agent_socket=socket,
-    )
-    write_atomic(request.output_path, build_build_config(request))
-    output.write(f"Wrote {request.output_path}\n")
-    output.write(f"{_BLUE}Building {runtime} image...{_RESET}\n")
-    result = run(
-        (
-            "devcontainer",
-            "build",
-            "--docker-path",
-            str(podman.engine),
-            "--config",
-            str(request.output_path),
-            "--workspace-folder",
-            str(paths.root),
+    output.write(f"{_BLUE}Building {runtime} runtime image...{_RESET}\n")
+    for argv in (
+        build_base_image_argv(
+            paths,
+            manifest,
+            build_arguments=config.build_arguments(),
+            engine=os.fspath(podman.engine),
         ),
-        timeout=1800,
-        capture=False,
-    )
-    if result.returncode != 0:  # ``run`` raises; retained for custom runners.
-        raise MaintenanceError("Build failed.")
+        build_runtime_image_argv(
+            paths,
+            manifest,
+            build_arguments=config.build_arguments(),
+            engine=os.fspath(podman.engine),
+        ),
+    ):
+        result = run(argv, timeout=1800, capture=False)
+        if result.returncode != 0:
+            raise MaintenanceError("Build failed.")
     output.write(
         f"{_GREEN}Done.{_RESET} Run {_BLUE}./sandbox.sh open {runtime}{_RESET} "
         "to start a session.\n"
@@ -209,8 +144,6 @@ def _scan(
                 "the krun backend cannot start Semgrep as a second process.\n"
             ),
         )
-    _require_devcontainer()
-
     configured = {
         entry.name
         for entry in RepositoryStore.for_file(
@@ -229,17 +162,9 @@ def _scan(
     )
     run(
         (
-            "devcontainer",
+            os.fspath(podman.engine),
             "exec",
-            "--docker-path",
-            str(podman.engine),
-            "--config",
-            str(paths.session_artifact(runtime, "devcontainer.json")),
-            "--id-label",
-            plan.session_label,
-            "--workspace-folder",
-            str(paths.root),
-            "--",
+            match.container_id,
             "semgrep",
             "scan",
             "--config",
@@ -250,10 +175,3 @@ def _scan(
         capture=False,
     )
     return MaintenanceResult()
-
-
-def _require_devcontainer() -> None:
-    if shutil.which("devcontainer") is None:
-        raise MaintenanceError(
-            "devcontainer CLI not found. Install: npm install -g @devcontainers/cli"
-        )

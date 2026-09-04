@@ -2,7 +2,7 @@
 
 ASF keeps one lock directory per runtime so two ``open`` commands cannot own
 the same session concurrently.  The lock format remains compatible with the
-accepted Bash implementation: ``.devcontainer/.open-lock-<runtime>/pid``.
+accepted Bash implementation: ``.asf/.open-lock-<runtime>/pid``.
 
 This module adds the guarantees needed before cleanup moves to Python:
 
@@ -349,7 +349,7 @@ class SessionLockManager:
 
     def _lock_path(self, runtime: str, *, create_parent: bool) -> Path:
         root = self._identity.script_dir
-        parent = root / ".devcontainer"
+        parent = root / ".asf"
         try:
             root.lstat()
         except OSError as exc:

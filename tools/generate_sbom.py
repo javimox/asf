@@ -55,16 +55,15 @@ def _excluded(path: Path) -> bool:
         return True
     if parts[:2] == ("docs", "sbom"):
         return True
-    if parts[:2] == (".devcontainer", "sessions"):
+    if parts[:2] == (".asf", "sessions"):
         return True
     if path.name in _EXCLUDED_NAMES or path.suffix in _EXCLUDED_SUFFIXES:
         return True
     if parts[0] == "secrets" and path.suffix == ".env":
         return True
-    if len(parts) > 1 and parts[0] == ".devcontainer" and (
+    if len(parts) > 1 and parts[0] == ".asf" and (
         parts[1].startswith(".open-lock-")
         or parts[1].startswith(".broker-host-")
-        or parts[1] == "devcontainer.json"
     ):
         return True
     return False

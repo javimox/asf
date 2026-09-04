@@ -119,13 +119,11 @@ class BrokerTestBase(unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tempdir.name) / "checkout"
         (self.root / "agents" / "claude").mkdir(parents=True)
-        (self.root / ".devcontainer").mkdir()
+        (self.root / "containers").mkdir()
+        (self.root / ".asf").mkdir()
         (self.root / "secrets").mkdir()
         (self.root / "tools").mkdir()
         (self.root / "sandbox.sh").write_text("#!/bin/sh\n", encoding="utf-8")
-        (self.root / ".devcontainer" / "devcontainer.base.json").write_text(
-            "{}\n", encoding="utf-8"
-        )
         (self.root / "agents" / "claude" / "runtime.yml").write_text(
             (ROOT / "agents" / "claude" / "runtime.yml").read_text(encoding="utf-8"),
             encoding="utf-8",
@@ -682,14 +680,13 @@ class BrokerLifecycleTests(BrokerTestBase):
         ]
         self.assertEqual(len(health), 1)
 
-    def test_devcontainer_directory_symlink_is_rejected(self) -> None:
+    def test_runtime_state_directory_symlink_is_rejected(self) -> None:
         request = self.request()
-        outside = Path(self.tempdir.name) / "outside-devcontainer"
+        outside = Path(self.tempdir.name) / "outside-asf-state"
         outside.mkdir()
-        (self.root / ".devcontainer" / "devcontainer.base.json").unlink()
-        (self.root / ".devcontainer").rmdir()
-        (self.root / ".devcontainer").symlink_to(outside, target_is_directory=True)
-        (outside / "devcontainer.base.json").write_text("{}\n", encoding="utf-8")
+        state_dir = self.root / ".asf"
+        state_dir.rmdir()
+        state_dir.symlink_to(outside, target_is_directory=True)
         with self.assertRaises(BrokerError):
             _ = request.state_path
 

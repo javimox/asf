@@ -29,7 +29,7 @@ cleanup() {
 trap cleanup EXIT
 
 cp -a "$ROOT/." "$TMP/asf"
-rm -rf "$TMP/asf/.devcontainer/.open-lock-"*
+rm -rf "$TMP/asf/.asf/.open-lock-"*
 
 mapfile -t TARGET_VOLUMES < <(
     PYTHONPATH="$TMP/asf" python3 - "$TMP/asf" "$TARGET_RUNTIME" <<'PY'

@@ -8,11 +8,7 @@ cp -a "$ROOT/." "$TMP/asf"
 mkdir -p "$TMP/bin" "$TMP/asf/secrets"
 printf '%s\n' 'ANTHROPIC_API_KEY=provider-secret' > "$TMP/asf/secrets/claude.env"
 chmod 600 "$TMP/asf/secrets/claude.env"
-cat > "$TMP/bin/devcontainer" <<'DEVCONTAINER'
-#!/usr/bin/env bash
-exit 0
-DEVCONTAINER
-chmod 755 "$TMP/bin/devcontainer"
+
 
 cat > "$TMP/bin/podman" <<'PODMAN'
 #!/usr/bin/env python3

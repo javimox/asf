@@ -21,25 +21,7 @@ cat > "$TMP/bin/podman" <<'PODMAN'
 exec "${ASF_FAKE_PODMAN_SCRIPT:?}" "$@"
 PODMAN
 
-cat > "$TMP/bin/devcontainer" <<'DEVCONTAINER'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'devcontainer %s\n' "$*" >> "${MOCK_LOG:?}"
-if [[ "${1:-}" == up ]]; then
-    session_label=""
-    previous=""
-    for argument in "$@"; do
-        if [[ "$previous" == "--id-label" && "$argument" == asf.session=* ]]; then
-            session_label="${argument#asf.session=}"
-        fi
-        previous="$argument"
-    done
-    [[ -z "$session_label" ]] || "${ASF_FAKE_PODMAN_SCRIPT:?}" __add-runtime "$session_label" >/dev/null
-fi
-exit 0
-DEVCONTAINER
-
-chmod 755 "$TMP/bin/podman" "$TMP/bin/devcontainer"
+chmod 755 "$TMP/bin/podman"
 
 cat > "$TMP/asf/secrets/claude.env" <<'ENV'
 ANTHROPIC_API_KEY=test-provider-key
@@ -52,16 +34,18 @@ grep -q 'LiteLLM broker ready' <<<"$output"
 grep -q 'Starting container' <<<"$output"
 ! grep -q 'BROKER_NETWORK' <<<"$output"
 grep -qE 'podman run .*--network .*claude-internal:alias=asf-broker .*--network .*claude-provider' "$MOCK_LOG"
-grep -q 'devcontainer up ' "$MOCK_LOG"
+grep -qE '^podman run .*--label=asf\.session=.*-claude' "$MOCK_LOG"
 
-python3 - "$TMP/asf/.devcontainer/sessions/claude/devcontainer.json" <<'PY'
-import json, sys
-from pathlib import Path
-p = Path(sys.argv[1])
-data = json.loads("\n".join(line for line in p.read_text().splitlines() if not line.startswith("//")))
-networks = [x for x in data.get("runArgs", []) if x.startswith("--network=")]
-assert len(networks) == 1 and networks[0].endswith("-claude-internal"), networks
-assert data["containerEnv"]["ASF_BROKER_ENABLED"] == "true"
+python3 - "$TMP/asf" <<'PY'
+import sys
+from asf.paths import RepoPaths
+from asf.runtime_plan import load_runtime_plan, runtime_plan_path
+
+paths = RepoPaths.for_root(sys.argv[1])
+plan = load_runtime_plan(runtime_plan_path(paths, "claude"))
+assert plan.broker_enabled is True
+attachments = plan.runtime_container.attachments
+assert len(attachments) == 1 and attachments[0].network.endswith("-claude-internal"), attachments
 PY
 
 echo "test_broker_enabled_open.sh: all assertions passed"

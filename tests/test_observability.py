@@ -28,7 +28,8 @@ from asf.session_events import record_session_event
 
 def make_checkout(root: Path) -> RepoPaths:
     (root / "sandbox.sh").write_text("#!/usr/bin/env bash\n")
-    (root / ".devcontainer").mkdir()
+    (root / "containers").mkdir()
+    (root / ".asf").mkdir()
     runtime = root / "agents" / "hermes"
     runtime.mkdir(parents=True)
     (runtime / "runtime.yml").write_text(
