@@ -18,7 +18,7 @@
   "documentDescribes": [
     "SPDXRef-Package-ASF"
   ],
-  "documentNamespace": "https://asf.invalid/spdx/2.0/152e413a735f8a85",
+  "documentNamespace": "https://asf.invalid/spdx/2.0/717e61802654a58c",
   "name": "ASF-2.0-source-deployment-inventory",
   "packages": [
     {
@@ -26,10 +26,10 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "152e413a735f8a85dcf0baf713f4b88cfe6613901e1aada99162d9d934ffeecc"
+          "checksumValue": "717e61802654a58cb5db3d4ef48860f54c64347bcaae3a6d2c46a5456cfb2e08"
         }
       ],
-      "comment": "Deterministic source-tree digest over 221 files using sorted SHA-256 file digests and relative paths. Git checkouts inventory tracked files only; source archives use the archive contents. Generated caches, build outputs, session artifacts, local .claude settings, and docs/sbom/ are excluded. Regenerate with tools/generate_sbom.py.",
+      "comment": "Deterministic source-tree digest over 233 files using sorted SHA-256 file digests and relative paths. Git checkouts inventory tracked files only; source archives use the archive contents. Generated caches, build outputs, session artifacts, local .claude settings, and docs/sbom/ are excluded. Regenerate with tools/generate_sbom.py.",
       "copyrightText": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -37,7 +37,7 @@
       "licenseDeclared": "BSD-4-Clause",
       "name": "Agent Sandboxing Framework",
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "152e413a735f8a85dcf0baf713f4b88cfe6613901e1aada99162d9d934ffeecc"
+        "packageVerificationCodeValue": "717e61802654a58cb5db3d4ef48860f54c64347bcaae3a6d2c46a5456cfb2e08"
       },
       "versionInfo": "2.0"
     }
