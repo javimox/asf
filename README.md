@@ -4,6 +4,14 @@
 ![Podman](https://img.shields.io/badge/Podman-rootless-892CA0?logo=podman&logoColor=white)
 
 A rootless, daemonless Podman-based orchestration framework for sandboxing AI agents.
+contributed upstream support providing direct attachment to TAP interfaces.
+
+### Upstream contributions
+
+ASF added support for direct TAP interface attachment and contributed it upstream
+to [containers/crun](https://github.com/containers/crun), an OCI runtime widely
+used by Podman. The contribution was merged in [containers/crun#2200](https://github.com/containers/crun/pull/2200) and released in crun 1.30.
+ASF uses this feature in its krun microVM integration to provide transparent, direct networking.
 
 ## Demo
 
