@@ -4,7 +4,11 @@
 ![Podman](https://img.shields.io/badge/Podman-rootless-892CA0?logo=podman&logoColor=white)
 
 A rootless, daemonless Podman-based orchestration framework for sandboxing AI agents.
-contributed upstream support providing direct attachment to TAP interfaces.
+
+ASF was born as a Master's degree thesis, but the original idea evolved far
+beyond its initial scope through many hours of design, experimentation, and
+development. I hope you enjoy using it as much as I enjoyed designing and
+building it.
 
 ### Upstream contributions
 
@@ -18,11 +22,6 @@ ASF uses this feature in its krun microVM integration to provide transparent, di
 <p align="center">
   <img src="docs/assets/asf-demo.gif" alt="ASF terminal demo">
 </p>
-
-ASF was born as a Master's degree thesis, but the original idea evolved far
-beyond its initial scope through many hours of design, experimentation, and
-development. I hope you enjoy using it as much as I enjoyed designing and
-building it.
 
 ## Quick start
 
